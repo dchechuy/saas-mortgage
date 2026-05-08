@@ -303,21 +303,19 @@ def learning_center():
 
     if integration:
         try:
+            offset = (page - 1) * _DOCS_PER_PAGE
             data = _call_skunkbox_get(integration, "documents", {
-                "page": page,
-                "per_page": _DOCS_PER_PAGE,
+                "limit":  _DOCS_PER_PAGE,
+                "offset": offset,
             })
-            # Defensive: handle {documents:[...]}, {items:[...]}, {data:[...]}, or bare list
+            # skunkBOX returns {documents:[...], total:N, limit:N, offset:N}
             docs = (data.get("documents")
                     or data.get("items")
                     or data.get("data")
                     or (data if isinstance(data, list) else []))
             total = int(data.get("total") or data.get("count")
                         or data.get("total_count") or len(docs))
-            total_pages = int(
-                data.get("pages") or data.get("total_pages")
-                or max(1, (total + _DOCS_PER_PAGE - 1) // _DOCS_PER_PAGE)
-            )
+            total_pages = max(1, (total + _DOCS_PER_PAGE - 1) // _DOCS_PER_PAGE)
         except Exception as exc:
             error = str(exc)
 
