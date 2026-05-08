@@ -8,6 +8,7 @@
   --muted: #64748b;
   --accent: #4361ee;
   --accent-strong: #3730a3;
+  --brand-title: #4361ee;
   --success-bg: #dcfce7;
   --success-text: #166534;
   --danger-bg: #fee2e2;
@@ -30,6 +31,7 @@
   --muted: #9fb0ca;
   --accent: #7aa2ff;
   --accent-strong: #a5bffb;
+  --brand-title: #4361ee;
   --success-bg: #10301f;
   --success-text: #86efac;
   --danger-bg: #3a1517;
@@ -112,16 +114,20 @@ a:hover {
 }
 
 .sidebar-brand-title {
-  font-size: 21px;
+  font-family: 'Titillium Web', sans-serif;
+  font-size: 22px;
   font-weight: 700;
   line-height: 1;
-  color: #fff;
+  color: var(--brand-title);
+  letter-spacing: 0.01em;
 }
 
 .sidebar-brand-subtitle {
-  font-size: 14px;
-  color: #c7d2fe;
-  margin-top: 4px;
+  font-size: 10px;
+  color: #ffffff;
+  margin-top: 3px;
+  text-align: right;
+  opacity: 0.75;
 }
 
 .sidebar-nav {
@@ -388,10 +394,17 @@ a:hover {
 }
 
 .page-title,
-.ds-page-title,
-.login-title {
+.ds-page-title {
   margin: 0;
   font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text);
   font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1192,11 +1205,34 @@ textarea:focus,
 }
 
 .container-tight {
-  width: min(100%, 420px);
+  width: min(100%, 1240px);
+}
+
+/* Two-panel login layout */
+.login-panels {
+  display: flex;
+  gap: 24px;
+  align-items: stretch;
 }
 
 .login-card {
+  flex: 0 0 588px;
   background: var(--panel);
+}
+
+.login-illustration-card {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  min-height: 100%;
+}
+
+.login-illustration-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: var(--radius);
 }
 
 .login-logo {
@@ -1204,14 +1240,14 @@ textarea:focus,
   margin-bottom: 20px;
 }
 .login-logo img {
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
 }
 
 .login-kicker {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;

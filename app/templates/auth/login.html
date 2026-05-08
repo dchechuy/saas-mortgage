@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - saas-mortgage</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <title>Login - scenarioDesk</title>
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon-96x96.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
@@ -29,38 +28,47 @@
     <i class="fa-solid fa-moon"></i>
   </button>
   <div class="container-tight py-6">
-    <div class="card card-md login-card">
-      <div class="card-body p-4 p-md-5">
-        <div class="login-logo">
-          <img src="{{ url_for('static', filename='web-app-manifest-192x192.png') }}" alt="saas-mortgage">
+    <div class="login-panels">
+
+      <!-- Login tile -->
+      <div class="card login-card">
+        <div class="card-body p-4 p-md-5">
+          <div class="login-logo">
+            <img src="{{ url_for('static', filename='web-app-manifest-192x192.png') }}" alt="scenarioDesk">
+          </div>
+          <div class="login-kicker">Cophy SaaS by Cofficiency</div>
+          <h1 class="login-title">Welcome to scenarioDesk</h1>
+          <p class="login-copy">Sign in to explore our AI-powered Mortgage Learning Center and get instant answers to your mortgage questions.</p>
+
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="flash-stack">
+              {% for category, message in messages %}
+              <div class="alert alert-{{ 'danger' if category == 'error' else category }}" role="alert">{{ message }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          {% endwith %}
+
+          <form method="post" class="stack">
+            <div>
+              <label class="form-label" for="username">Username</label>
+              <input id="username" name="username" type="text" required autofocus class="form-control">
+            </div>
+            <div>
+              <label class="form-label" for="password">Password</label>
+              <input id="password" name="password" type="password" required class="form-control">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Sign In</button>
+          </form>
         </div>
-        <div class="login-kicker">Reusable SaaS foundation</div>
-        <h1 class="login-title">Welcome to saas-mortgage</h1>
-        <p class="login-copy">Sign in to manage the platform, configure integrations, and launch your next prototype.</p>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-          <div class="flash-stack">
-            {% for category, message in messages %}
-            <div class="alert alert-{{ 'danger' if category == 'error' else category }}" role="alert">{{ message }}</div>
-            {% endfor %}
-          </div>
-          {% endif %}
-        {% endwith %}
-
-        <form method="post" class="stack">
-          <div>
-            <label class="form-label" for="username">Username</label>
-            <input id="username" name="username" type="text" required autofocus class="form-control">
-          </div>
-          <div>
-            <label class="form-label" for="password">Password</label>
-            <input id="password" name="password" type="password" required class="form-control">
-          </div>
-          <button type="submit" class="btn btn-primary w-100">Sign In</button>
-        </form>
-
       </div>
+
+      <!-- Illustration tile -->
+      <div class="card login-illustration-card">
+        <img src="{{ url_for('static', filename='login-illustration.jpg') }}" alt="Mortgage team" class="login-illustration-img">
+      </div>
+
     </div>
   </div>
 </body>
