@@ -61,8 +61,8 @@
       <tbody>
         {% for doc in docs %}
         {% set doc_id  = doc.get('id') or doc.get('document_id') %}
-        {% set ftype   = (doc.get('file_type') or doc.get('type') or '') | lower %}
-        {% set status  = (doc.get('status') or '') | lower %}
+        {% set ftype   = (doc.get('file_format') or doc.get('file_type') or doc.get('type') or '') | lower %}
+        {% set status  = (doc.get('status') or ('active' if doc.get('is_active') else 'inactive') if doc.get('is_active') is not none else '') | lower %}
         {% set doc_url = url_for('agents.learning_center_doc', doc_id=doc_id) %}
         <tr style="cursor:pointer" onclick="window.location='{{ doc_url }}'">
 
@@ -98,9 +98,14 @@
             {% endif %}
           </td>
 
-          {# Collection #}
+          {# Collection — API returns collections:[{id,name}] #}
           <td style="font-size:13px;color:var(--muted)">
-            {{ doc.get('collection_name') or doc.get('collection') or '—' }}
+            {% set colls = doc.get('collections') or [] %}
+            {% if colls %}
+              {{ colls | map(attribute='name') | join(', ') }}
+            {% else %}
+              {{ doc.get('collection_name') or doc.get('collection') or '—' }}
+            {% endif %}
           </td>
 
           {# Type badge #}
