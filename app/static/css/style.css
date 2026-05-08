@@ -122,6 +122,10 @@ a:hover {
   letter-spacing: 0.01em;
 }
 
+.brand-title-light {
+  color: #ffffff;
+}
+
 .sidebar-brand-subtitle {
   font-size: 10px;
   color: #ffffff;
@@ -190,8 +194,8 @@ a:hover {
 
 /* ── Sidebar collapsed state ──────────────────────────────── */
 .sidebar.collapsed .sidebar-brand-copy { display: none; }
-.sidebar.collapsed .sidebar-brand { padding: 16px 0; justify-content: center; gap: 0; }
-.sidebar.collapsed .brand-mark { width: 36px; height: 36px; border-radius: 10px; }
+.sidebar.collapsed .sidebar-brand { padding: 16px 0 14px; justify-content: center; gap: 0; }
+.sidebar.collapsed .brand-mark { width: 45px; height: 45px; border-radius: 14px; }
 .sidebar.collapsed .nav-section-label,
 .sidebar.collapsed .nav-subsection-label {
   height: 1px;
@@ -403,11 +407,11 @@ a:hover {
 }
 
 .login-title {
-  margin: 0;
-  font-size: 28px;
+  margin: 0 0 16px;
+  font-size: 27px;
   font-weight: 700;
   color: var(--text);
-  font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Titillium Web", sans-serif;
 }
 
 .page-pretitle,
@@ -1241,22 +1245,22 @@ textarea:focus,
 
 .login-logo {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 0px;
 }
 .login-logo img {
-  width: 120px;
-  height: 120px;
-  border-radius: 28px;
+  width: 156px;
+  height: 156px;
+  border-radius: 36px;
 }
 
 .login-kicker {
   display: block;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--accent);
-  margin-bottom: 8px;
+  margin-bottom: 30px;
   text-align: center;
 }
 
