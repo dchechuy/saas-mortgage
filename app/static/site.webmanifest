@@ -1,6 +1,6 @@
 {
-  "name": "saas-vanilla",
-  "short_name": "saas-vanilla",
+  "name": "Cophy",
+  "short_name": "Cophy",
   "icons": [
     {
       "src": "/static/web-app-manifest-192x192.png",
