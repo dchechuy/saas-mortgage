@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Documentation - saas-mortgage{% endblock %}
+{% block page_heading %}Documentation{% endblock %}
+{% block content %}
+
+<div style="display:flex;gap:32px;margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:12px;flex-wrap:wrap">
+
+  <div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+                color:var(--muted);margin-bottom:8px">User Guides</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap">
+      <a href="{{ url_for('help.release_notes') }}"
+         class="nav-link {% if active_tab == 'release_notes' %}active{% endif %}" style="padding:6px 14px;font-size:13px">
+        Release Notes
+      </a>
+      <a href="{{ url_for('help.quick_start') }}"
+         class="nav-link {% if active_tab == 'quick_start' %}active{% endif %}" style="padding:6px 14px;font-size:13px">
+        Quick Start Guide
+      </a>
+      <a href="{{ url_for('help.user_manual') }}"
+         class="nav-link {% if active_tab == 'user_manual' %}active{% endif %}" style="padding:6px 14px;font-size:13px">
+        User Manual
+      </a>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+                color:var(--muted);margin-bottom:8px">System Overview</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap">
+      <a href="{{ url_for('help.architecture') }}"
+         class="nav-link {% if active_tab == 'architecture' %}active{% endif %}" style="padding:6px 14px;font-size:13px">
+        Architecture Overview
+      </a>
+      <a href="{{ url_for('help.dependencies') }}"
+         class="nav-link {% if active_tab == 'dependencies' %}active{% endif %}" style="padding:6px 14px;font-size:13px">
+        Python Dependencies
+      </a>
+    </div>
+  </div>
+
+</div>
+
+{% block help_content %}{% endblock %}
+{% endblock %}

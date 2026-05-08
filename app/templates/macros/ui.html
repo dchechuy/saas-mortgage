@@ -1,0 +1,69 @@
+{% macro icon(name, classes="icon") %}
+{% set icons = {
+  'dashboard': 'fa-gauge-high',
+  'users': 'fa-users',
+  'shield': 'fa-shield-halved',
+  'brain': 'fa-brain',
+  'tags': 'fa-tags',
+  'plug': 'fa-plug',
+  'book': 'fa-book-open',
+  'sparkles': 'fa-star',
+  'rocket': 'fa-rocket',
+  'circle-check': 'fa-circle-check',
+  'settings': 'fa-gear',
+  'logout': 'fa-right-from-bracket',
+  'chart': 'fa-chart-bar',
+  'robot': 'fa-robot',
+  'message': 'fa-message',
+  'send': 'fa-paper-plane'
+} %}
+<i class="fa-solid {{ icons.get(name, 'fa-circle') }} {{ classes }}" aria-hidden="true"></i>
+{% endmacro %}
+
+{% macro page_header(title, eyebrow="", description="", action_html="") %}
+<div class="ds-page-header card">
+  <div class="card-body ds-page-header-body">
+    <div class="ds-page-copy">
+      {% if eyebrow %}
+      <div class="ds-eyebrow">{{ eyebrow }}</div>
+      {% endif %}
+      <h2 class="ds-page-title">{{ title }}</h2>
+      {% if description %}
+      <p class="ds-page-description">{{ description }}</p>
+      {% endif %}
+    </div>
+    {% if action_html %}
+    <div class="ds-page-actions">{{ action_html | safe }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro stat_card(title, value, icon_name, tone="teal", note="") %}
+<div class="card ds-stat-card ds-tone-{{ tone }}">
+  <div class="card-body ds-stat-card-body">
+    <div class="ds-stat-top">
+      <div class="ds-stat-icon">
+        {{ icon(icon_name, "icon icon-lg") }}
+      </div>
+      <div class="ds-stat-value">{{ value }}</div>
+    </div>
+    <div class="ds-stat-label">{{ title }}</div>
+    {% if note %}
+    <div class="ds-stat-note">{{ note }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro empty_state(title, body, icon_name="sparkles") %}
+<div class="card ds-empty-state">
+  <div class="card-body ds-empty-state-body">
+    <div class="ds-empty-icon">
+      {{ icon(icon_name, "icon icon-xl") }}
+    </div>
+    <h3>{{ title }}</h3>
+    <p>{{ body }}</p>
+  </div>
+</div>
+{% endmacro %}

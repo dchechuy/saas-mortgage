@@ -1,0 +1,20 @@
+{% macro avatar(user, size='md') %}
+{% set dims = {'sm': 28, 'md': 38, 'lg': 72} %}
+{% set px = dims.get(size, 38) %}
+{% if user.first_name or user.last_name %}
+  {% set initials = ((user.first_name or '')[:1] ~ (user.last_name or '')[:1]).upper() %}
+{% else %}
+  {% set initials = user.username[:2].upper() %}
+{% endif %}
+{% if user.avatar %}
+<img src="{{ url_for('static', filename='uploads/avatars/' ~ user.avatar) }}"
+     alt="{{ user.display_name }}"
+     style="width:{{ px }}px;height:{{ px }}px;border-radius:50%;object-fit:cover;">
+{% else %}
+<div class="user-avatar"
+     style="width:{{ px }}px;height:{{ px }}px;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+  {{ initials }}
+</div>
+{% endif %}
+{% endmacro %}
+

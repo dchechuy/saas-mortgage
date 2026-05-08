@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% block title %}Reporting — saas-mortgage{% endblock %}
+{% block page_heading %}Reporting{% endblock %}
+
+{% block content %}
+
+{# ── Tab bar ─────────────────────────────────────────────────────── #}
+<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px">
+  <a href="{{ url_for('reporting.index', tab='llm') }}"
+     style="padding:10px 20px;font-size:13px;font-weight:600;text-decoration:none;
+            border-bottom:2px solid transparent;margin-bottom:-2px;
+            {% if active_tab == 'llm' %}border-bottom-color:var(--accent);color:var(--accent){% else %}color:var(--muted){% endif %}">
+    LLM Requests
+  </a>
+  <a href="{{ url_for('reporting.index', tab='activity') }}"
+     style="padding:10px 20px;font-size:13px;font-weight:600;text-decoration:none;
+            border-bottom:2px solid transparent;margin-bottom:-2px;
+            {% if active_tab == 'activity' %}border-bottom-color:var(--accent);color:var(--accent){% else %}color:var(--muted){% endif %}">
+    User Activity
+  </a>
+  <a href="{{ url_for('reporting.index', tab='api') }}"
+     style="padding:10px 20px;font-size:13px;font-weight:600;text-decoration:none;
+            border-bottom:2px solid transparent;margin-bottom:-2px;
+            {% if active_tab == 'api' %}border-bottom-color:var(--accent);color:var(--accent){% else %}color:var(--muted){% endif %}">
+    External API Requests
+  </a>
+</div>
+
+{# ── Page title ───────────────────────────────────────────────────── #}
+<div class="sb-page-header" style="margin-bottom:20px">
+  <h1 class="page-title">
+    {% if active_tab == 'activity' %}User Activity
+    {% elif active_tab == 'api' %}External API Requests
+    {% else %}LLM Requests{% endif %}
+  </h1>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════════════
+   TAB 1 — LLM Requests
+════════════════════════════════════════════════════════════════════ #}
+{% if active_tab == 'llm' %}
+
+<div class="reporting-stat-strip">
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Total Calls</div>
+    <div class="reporting-stat-value">{{ "{:,}".format(llm_summary.total) }}</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Total Tokens</div>
+    <div class="reporting-stat-value">{{ "{:,}".format(llm_summary.total_tokens) }}</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Avg Latency</div>
+    <div class="reporting-stat-value">{{ llm_summary.avg_latency }}ms</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Errors</div>
+    <div class="reporting-stat-value">{{ llm_summary.errors }}</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Error Rate</div>
+    <div class="reporting-stat-value">{{ "%.1f" % llm_summary.error_rate }}%</div>
+  </div>
+</div>
+
+{# Filter bar #}
+<div class="card" style="margin-bottom:20px;padding:16px 20px">
+  <form method="GET" action="{{ url_for('reporting.index') }}"
+        style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="tab" value="llm">
+    <div class="filter-group">
+      <label class="filter-label">From</label>
+      <input type="date" name="date_from" value="{{ llm_filters.date_from }}" class="form-control form-control-sm">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">To</label>
+      <input type="date" name="date_to" value="{{ llm_filters.date_to }}" class="form-control form-control-sm">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Model</label>
+      <select name="model_id" class="form-select form-select-sm">
+        <option value="">All models</option>
+        {% for m in llm_models %}
+        <option value="{{ m.id }}" {% if llm_filters.model_id == m.id %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Use Case</label>
+      <input type="text" name="use_case" value="{{ llm_filters.use_case }}" placeholder="e.g. chat"
+             class="form-control form-control-sm" style="width:120px">
+    </div>
+    <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
+    <a href="{{ url_for('reporting.index', tab='llm') }}" style="color:var(--muted);font-size:13px;padding:4px 8px;text-decoration:none" class="btn btn-link btn-sm">Reset</a>
+  </form>
+</div>
+
+{# Results table #}
+<div class="card" style="padding:0">
+  {% if llm_logs %}
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table" style="margin:0">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Model</th>
+          <th>Use Case</th>
+          <th>Tokens</th>
+          <th>Latency</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in llm_logs %}
+        <tr>
+          <td><span class="local-time" data-utc="{{ log.created_at.isoformat() }}">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</span></td>
+          <td style="font-size:13px">{{ log.model_name or '—' }}</td>
+          <td style="font-size:13px;color:var(--muted)">{{ log.use_case or '—' }}</td>
+          <td style="font-size:13px;color:var(--muted)">{{ "{:,}".format(log.total_tokens) if log.total_tokens else '—' }}</td>
+          <td style="font-size:13px;color:var(--muted)">{{ log.latency_ms ~ 'ms' if log.latency_ms else '—' }}</td>
+          <td>
+            <span class="badge {{ 'text-bg-green-lt' if log.status == 'success' else 'text-bg-red-lt' }}">
+              {{ log.status | capitalize }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {# Pagination #}
+  {% if llm_pagination.pages > 1 %}
+  <div style="padding:12px 20px;display:flex;gap:8px;align-items:center;border-top:1px solid var(--border)">
+    {% if llm_pagination.has_prev %}
+    <a href="{{ url_for('reporting.index', tab='llm', page=llm_pagination.prev_num,
+               date_from=llm_filters.date_from, date_to=llm_filters.date_to,
+               model_id=llm_filters.model_id or '', use_case=llm_filters.use_case) }}"
+       class="btn btn-secondary btn-sm">← Prev</a>
+    {% endif %}
+    <span style="font-size:13px;color:var(--muted)">Page {{ llm_pagination.page }} of {{ llm_pagination.pages }}</span>
+    {% if llm_pagination.has_next %}
+    <a href="{{ url_for('reporting.index', tab='llm', page=llm_pagination.next_num,
+               date_from=llm_filters.date_from, date_to=llm_filters.date_to,
+               model_id=llm_filters.model_id or '', use_case=llm_filters.use_case) }}"
+       class="btn btn-secondary btn-sm">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:48px 24px;color:var(--muted)">
+    No LLM requests in this date range.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}{# /llm tab #}
+
+
+{# ════════════════════════════════════════════════════════════════════
+   TAB 2 — User Activity
+════════════════════════════════════════════════════════════════════ #}
+{% if active_tab == 'activity' %}
+
+<div class="reporting-stat-strip">
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Total Actions</div>
+    <div class="reporting-stat-value">{{ "{:,}".format(act_summary.total) }}</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Active Users</div>
+    <div class="reporting-stat-value">{{ act_summary.active_users }}</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Top Action</div>
+    <div class="reporting-stat-value" style="font-size:16px">{{ act_summary.top_action }}</div>
+  </div>
+</div>
+
+{# Filter bar #}
+<div class="card" style="margin-bottom:20px;padding:16px 20px">
+  <form method="GET" action="{{ url_for('reporting.index') }}"
+        style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="tab" value="activity">
+    <div class="filter-group">
+      <label class="filter-label">From</label>
+      <input type="date" name="date_from" value="{{ act_filters.date_from }}" class="form-control form-control-sm">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">To</label>
+      <input type="date" name="date_to" value="{{ act_filters.date_to }}" class="form-control form-control-sm">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">User</label>
+      <select name="act_user_id" class="form-select form-select-sm">
+        <option value="">All users</option>
+        {% for u in all_users %}
+        <option value="{{ u.id }}" {% if act_filters.user_id == u.id %}selected{% endif %}>{{ u.display_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Action</label>
+      <select name="act_action" class="form-select form-select-sm">
+        <option value="">All actions</option>
+        {% for key, label in action_labels.items() %}
+        <option value="{{ key }}" {% if act_filters.action == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
+    <a href="{{ url_for('reporting.index', tab='activity') }}" style="color:var(--muted);font-size:13px;padding:4px 8px;text-decoration:none" class="btn btn-link btn-sm">Reset</a>
+  </form>
+</div>
+
+{# Results table #}
+<div class="card" style="padding:0">
+  {% if act_logs %}
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table" style="margin:0">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Page</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in act_logs %}
+        <tr>
+          <td><span class="local-time" data-utc="{{ log.created_at.isoformat() }}">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</span></td>
+          <td style="font-size:13px">{{ log.user.display_name if log.user else '—' }}</td>
+          <td style="font-size:13px">{{ action_labels.get(log.action, log.action) }}</td>
+          <td style="font-size:13px;color:var(--muted)">{{ log.page or '—' }}</td>
+          <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ log.ip_address or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if act_pagination.pages > 1 %}
+  <div style="padding:12px 20px;display:flex;gap:8px;align-items:center;border-top:1px solid var(--border)">
+    {% if act_pagination.has_prev %}
+    <a href="{{ url_for('reporting.index', tab='activity', act_page=act_pagination.prev_num,
+               date_from=act_filters.date_from, date_to=act_filters.date_to,
+               act_user_id=act_filters.user_id or '', act_action=act_filters.action) }}"
+       class="btn btn-secondary btn-sm">← Prev</a>
+    {% endif %}
+    <span style="font-size:13px;color:var(--muted)">Page {{ act_pagination.page }} of {{ act_pagination.pages }}</span>
+    {% if act_pagination.has_next %}
+    <a href="{{ url_for('reporting.index', tab='activity', act_page=act_pagination.next_num,
+               date_from=act_filters.date_from, date_to=act_filters.date_to,
+               act_user_id=act_filters.user_id or '', act_action=act_filters.action) }}"
+       class="btn btn-secondary btn-sm">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:48px 24px;color:var(--muted)">
+    No activity logged in this date range.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}{# /activity tab #}
+
+
+{# ════════════════════════════════════════════════════════════════════
+   TAB 3 — External API Requests
+════════════════════════════════════════════════════════════════════ #}
+{% if active_tab == 'api' %}
+
+<div class="reporting-stat-strip">
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Total Requests</div>
+    <div class="reporting-stat-value">{{ "{:,}".format(api_summary.total) }}</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Errors</div>
+    <div class="reporting-stat-value">{{ api_summary.errors }}</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Error Rate</div>
+    <div class="reporting-stat-value">{{ "%.1f" % api_summary.error_rate }}%</div>
+  </div>
+  <div class="reporting-stat-card">
+    <div class="reporting-stat-label">Avg Latency</div>
+    <div class="reporting-stat-value">{{ api_summary.avg_latency }}ms</div>
+  </div>
+</div>
+
+{# Filter bar #}
+<div class="card" style="margin-bottom:20px;padding:16px 20px">
+  <form method="GET" action="{{ url_for('reporting.index') }}"
+        style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="tab" value="api">
+    <div class="filter-group">
+      <label class="filter-label">From</label>
+      <input type="date" name="date_from" value="{{ api_filters.date_from }}" class="form-control form-control-sm">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">To</label>
+      <input type="date" name="date_to" value="{{ api_filters.date_to }}" class="form-control form-control-sm">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Integration</label>
+      <select name="integration_id" class="form-select form-select-sm">
+        <option value="">All integrations</option>
+        {% for integ in integrations %}
+        <option value="{{ integ.id }}" {% if api_filters.integration_id == integ.id %}selected{% endif %}>{{ integ.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
+    <a href="{{ url_for('reporting.index', tab='api') }}" style="color:var(--muted);font-size:13px;padding:4px 8px;text-decoration:none" class="btn btn-link btn-sm">Reset</a>
+  </form>
+</div>
+
+{# Results table #}
+<div class="card" style="padding:0">
+  {% if api_logs %}
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table" style="margin:0">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Integration</th>
+          <th>Method</th>
+          <th>Endpoint</th>
+          <th>Status</th>
+          <th>Latency</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in api_logs %}
+        <tr>
+          <td><span class="local-time" data-utc="{{ log.created_at.isoformat() }}">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</span></td>
+          <td style="font-size:13px">{{ log.integration_name or '—' }}</td>
+          <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ log.method or '—' }}</td>
+          <td style="font-family:monospace;font-size:12px;color:var(--muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ log.endpoint or '' }}">{{ log.endpoint or '—' }}</td>
+          <td>
+            {% if log.status_code %}
+            <span class="badge {{ 'text-bg-green-lt' if log.status_code < 400 else 'text-bg-red-lt' }}">
+              {{ log.status_code }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:13px;color:var(--muted)">{{ log.latency_ms ~ 'ms' if log.latency_ms else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if api_pagination.pages > 1 %}
+  <div style="padding:12px 20px;display:flex;gap:8px;align-items:center;border-top:1px solid var(--border)">
+    {% if api_pagination.has_prev %}
+    <a href="{{ url_for('reporting.index', tab='api', api_page=api_pagination.prev_num,
+               date_from=api_filters.date_from, date_to=api_filters.date_to,
+               integration_id=api_filters.integration_id or '') }}"
+       class="btn btn-secondary btn-sm">← Prev</a>
+    {% endif %}
+    <span style="font-size:13px;color:var(--muted)">Page {{ api_pagination.page }} of {{ api_pagination.pages }}</span>
+    {% if api_pagination.has_next %}
+    <a href="{{ url_for('reporting.index', tab='api', api_page=api_pagination.next_num,
+               date_from=api_filters.date_from, date_to=api_filters.date_to,
+               integration_id=api_filters.integration_id or '') }}"
+       class="btn btn-secondary btn-sm">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:48px 24px;color:var(--muted)">
+    No external API requests logged in this date range.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}{# /api tab #}
+
+{% endblock %}

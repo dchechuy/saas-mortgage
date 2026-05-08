@@ -1,0 +1,330 @@
+{% extends "help/base_user_docs.html" %}
+
+{% block tab_actions %}
+{% if current_user.role == 'admin' %}
+<button class="btn btn-primary btn-sm" onclick="openGenerateModal()">
+  <i class="fas fa-magic" style="margin-right:6px"></i>Generate Release Notes
+</button>
+{% endif %}
+{% endblock %}
+
+{% block help_content %}
+
+{# ── Release cards ── #}
+{% if notes %}
+  {% for note in notes %}
+    {% set hex = color_hex.get((note.codename or '').split()[0], '#4361ee') if note.codename else '#4361ee' %}
+
+    {% if note.release_type == 'major' %}
+    {# ════ MAJOR RELEASE ════ #}
+    <div class="release-card release-card-major" style="margin-bottom:28px;border-radius:12px;overflow:hidden;box-shadow:var(--shadow)">
+      <div class="release-banner" style="background:linear-gradient(135deg,{{ hex }}22 0%,{{ hex }}11 100%);
+           border-bottom:3px solid {{ hex }}44;padding:20px 24px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px">
+              🚀 v{{ note.version_string }}
+              {% if note.codename %}
+              <span style="font-size:13px;font-weight:500;color:var(--muted);margin-left:8px">· {{ note.codename }}</span>
+              {% elif note.title %}
+              <span style="font-size:13px;font-weight:500;color:var(--muted);margin-left:8px">· {{ note.title }}</span>
+              {% endif %}
+            </div>
+            <span class="release-type-badge release-type-major"
+                  style="background:{{ hex }}22;color:{{ hex }};border:1px solid {{ hex }}44">
+              Major Release
+            </span>
+          </div>
+          <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            <span style="font-size:12px;color:var(--muted)">
+              <span class="local-time" data-utc="{{ (note.published_at or note.created_at).isoformat() }}">
+                {{ (note.published_at or note.created_at).strftime('%B %d, %Y') }}
+              </span>
+            </span>
+            {% if current_user.role == 'admin' %}
+            <form method="post" action="{{ url_for('help.unpublish_release', note_id=note.id) }}"
+                  style="margin:0" onsubmit="return confirm('Move v{{ note.version_string }} back to draft?')">
+              <button type="submit" class="btn btn-sm"
+                      style="font-size:11px;padding:2px 10px;background:transparent;
+                             border:1px solid var(--border);color:var(--muted)">
+                Unpublish
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="release-content" style="padding:24px 28px">
+        {% if note.content_html %}
+          {{ note.content_html | safe }}
+        {% elif note.summary_markdown %}
+          {{ note.summary_markdown | md | safe }}
+        {% endif %}
+      </div>
+    </div>
+
+    {% elif note.release_type == 'minor' %}
+    {# ════ MINOR RELEASE ════ #}
+    <div class="release-card release-card-minor"
+         style="margin-bottom:20px;border-radius:10px;overflow:hidden;box-shadow:var(--shadow-sm)">
+      <div style="padding:16px 22px;border-bottom:1px solid var(--border);
+                  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:3px">
+            🔧 v{{ note.version_string }}
+            {% if note.title %}
+            <span style="font-size:13px;font-weight:400;color:var(--muted);margin-left:6px">· {{ note.title }}</span>
+            {% endif %}
+          </div>
+          <span class="release-type-badge release-type-minor">Minor Release</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;color:var(--muted)">
+            <span class="local-time" data-utc="{{ (note.published_at or note.created_at).isoformat() }}">
+              {{ (note.published_at or note.created_at).strftime('%B %d, %Y') }}
+            </span>
+          </span>
+          {% if current_user.role == 'admin' %}
+          <form method="post" action="{{ url_for('help.unpublish_release', note_id=note.id) }}"
+                style="margin:0" onsubmit="return confirm('Move v{{ note.version_string }} back to draft?')">
+            <button type="submit" class="btn btn-sm"
+                    style="font-size:11px;padding:2px 10px;background:transparent;
+                           border:1px solid var(--border);color:var(--muted)">
+              Unpublish
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      <div class="release-content" style="padding:18px 22px">
+        {% if note.content_html %}
+          {{ note.content_html | safe }}
+        {% elif note.summary_markdown %}
+          {{ note.summary_markdown | md | safe }}
+        {% endif %}
+      </div>
+    </div>
+
+    {% else %}
+    {# ════ PATCH RELEASE ════ #}
+    <div class="release-card release-card-patch"
+         style="margin-bottom:14px;border-radius:8px;overflow:hidden;box-shadow:var(--shadow-xs, var(--shadow-sm))">
+      <div style="padding:12px 18px;border-bottom:1px solid var(--border-soft);
+                  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <span style="font-size:14px;font-weight:600;color:var(--text)">
+            🔩 v{{ note.version_string }}
+          </span>
+          {% if note.title %}
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">· {{ note.title }}</span>
+          {% endif %}
+          <span class="release-type-badge release-type-patch" style="margin-left:8px">Patch</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;color:var(--muted)">
+            <span class="local-time" data-utc="{{ (note.published_at or note.created_at).isoformat() }}">
+              {{ (note.published_at or note.created_at).strftime('%b %d, %Y') }}
+            </span>
+          </span>
+          {% if current_user.role == 'admin' %}
+          <form method="post" action="{{ url_for('help.unpublish_release', note_id=note.id) }}"
+                style="margin:0" onsubmit="return confirm('Move v{{ note.version_string }} back to draft?')">
+            <button type="submit" class="btn btn-sm"
+                    style="font-size:11px;padding:2px 8px;background:transparent;
+                           border:1px solid var(--border);color:var(--muted)">
+              Unpublish
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      <div class="release-content" style="padding:14px 18px">
+        {% if note.content_html %}
+          {{ note.content_html | safe }}
+        {% elif note.summary_markdown %}
+          {{ note.summary_markdown | md | safe }}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+  {% endfor %}
+
+{% else %}
+  <div style="text-align:center;padding:80px 20px;color:var(--muted)">
+    <div style="font-size:44px;margin-bottom:16px">📋</div>
+    <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:8px">No release notes yet</div>
+    {% if current_user.role == 'admin' %}
+    <p style="font-size:13px">Click <strong>Generate Release Notes</strong> above to create the first one.</p>
+    {% else %}
+    <p style="font-size:13px">Release notes will appear here once published.</p>
+    {% endif %}
+  </div>
+{% endif %}
+
+
+{# ── Generate Release Notes modal (admin only) ── #}
+{% if current_user.role == 'admin' %}
+<div id="generateModal" style="display:none;position:fixed;inset:0;z-index:1000;
+     background:rgba(0,0,0,0.45);align-items:center;justify-content:center">
+  <div style="background:var(--card);border-radius:12px;box-shadow:var(--shadow-lg,var(--shadow));
+              width:100%;max-width:680px;margin:20px;overflow:hidden">
+
+    {# Modal header #}
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);
+                display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">
+          <i class="fas fa-magic" style="color:var(--primary);margin-right:8px"></i>Generate Release Notes
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">
+          AI-powered from your CHANGELOG.md
+        </div>
+      </div>
+      <button onclick="closeGenerateModal()"
+              style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1">×</button>
+    </div>
+
+    {# Changelog status banner #}
+    <div id="changelogBanner" style="padding:10px 24px;font-size:13px;
+         background:var(--panel-muted);border-bottom:1px solid var(--border);color:var(--muted)">
+      <i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading changelog entries…
+    </div>
+
+    {# Modal body #}
+    <div style="padding:20px 24px">
+      <form method="post" action="{{ url_for('help.generate_release') }}" id="generateForm">
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;text-transform:uppercase;
+                        letter-spacing:0.4px;color:var(--muted);display:block;margin-bottom:6px">
+            Changelog Entries
+          </label>
+          <textarea name="raw_summary" id="rawSummary" rows="10"
+                    placeholder="Paste changelog entries here, or they will be pre-filled from CHANGELOG.md…"
+                    style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;
+                           font-size:13px;line-height:1.6;padding:10px 14px;
+                           border:1px solid var(--border);border-radius:6px;
+                           background:var(--input-bg,var(--panel-muted));color:var(--text)"></textarea>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <label style="font-size:12px;font-weight:600;text-transform:uppercase;
+                          letter-spacing:0.4px;color:var(--muted);display:block;margin-bottom:6px">
+              Release Type
+            </label>
+            <select name="release_type_override"
+                    style="width:100%;padding:8px 12px;border:1px solid var(--border);
+                           border-radius:6px;background:var(--input-bg,var(--panel-muted));
+                           color:var(--text);font-size:13px">
+              <option value="">Auto-detect (recommended)</option>
+              <option value="patch">Patch — bug fixes only</option>
+              <option value="minor">Minor — new features</option>
+              <option value="major">Major — significant release</option>
+            </select>
+          </div>
+          <div style="flex-shrink:0;padding-top:20px">
+            <button type="submit" class="btn btn-primary" id="generateBtn">
+              <i class="fas fa-magic" style="margin-right:6px"></i>Generate &amp; Publish
+            </button>
+          </div>
+        </div>
+
+        <p style="font-size:11px;color:var(--muted);margin-top:12px;margin-bottom:0">
+          The AI will classify the release type, write formatted HTML release notes, and publish immediately.
+        </p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openGenerateModal() {
+  const modal = document.getElementById('generateModal');
+  modal.style.display = 'flex';
+
+  // Fetch changelog preview
+  fetch('{{ url_for("help.changelog_preview") }}')
+    .then(r => r.json())
+    .then(data => {
+      const banner = document.getElementById('changelogBanner');
+      if (data.has_entries) {
+        banner.style.background = 'var(--success-bg, #f0fdf4)';
+        banner.style.color = 'var(--success-text, #166534)';
+        banner.innerHTML = '<i class="fas fa-check-circle" style="margin-right:6px"></i>' +
+          (data.entry_count > 0
+            ? data.entry_count + ' new section' + (data.entry_count > 1 ? 's' : '') + ' · '
+            : '') +
+          escapeHtml(data.message);
+        // Pre-fill textarea if empty
+        const ta = document.getElementById('rawSummary');
+        if (!ta.value.trim()) {
+          ta.value = data.entries;
+        }
+      } else {
+        banner.style.background = 'var(--warning-bg, #fffbeb)';
+        banner.style.color = 'var(--warning-text, #92400e)';
+        banner.innerHTML = '<i class="fas fa-exclamation-triangle" style="margin-right:6px"></i>' +
+          escapeHtml(data.message);
+      }
+    })
+    .catch(() => {
+      document.getElementById('changelogBanner').innerHTML =
+        '<i class="fas fa-exclamation-circle" style="margin-right:6px"></i>Could not load changelog preview.';
+    });
+}
+
+function closeGenerateModal() {
+  document.getElementById('generateModal').style.display = 'none';
+}
+
+function escapeHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Show loading state on submit
+document.getElementById('generateForm').addEventListener('submit', function() {
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Generating…';
+});
+
+// Close on backdrop click
+document.getElementById('generateModal').addEventListener('click', function(e) {
+  if (e.target === this) closeGenerateModal();
+});
+</script>
+
+{# Badge styles injected once #}
+<style>
+.badge-new {
+  background: #dbeafe; color: #1e40af;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 4px; margin-right: 5px;
+  vertical-align: middle; letter-spacing: 0.3px;
+}
+.badge-improved {
+  background: #d1fae5; color: #065f46;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 4px; margin-right: 5px;
+  vertical-align: middle; letter-spacing: 0.3px;
+}
+.badge-fix {
+  background: #fee2e2; color: #991b1b;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 4px; margin-right: 5px;
+  vertical-align: middle; letter-spacing: 0.3px;
+}
+.release-content h3 {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  margin: 16px 0 8px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft, var(--border));
+}
+.release-content ul { padding-left: 20px; margin: 6px 0; }
+.release-content li { margin-bottom: 5px; font-size: 14px; line-height: 1.6; }
+.release-content p  { font-size: 14px; line-height: 1.7; margin-bottom: 10px; }
+</style>
+{% endif %}
+
+{% endblock %}

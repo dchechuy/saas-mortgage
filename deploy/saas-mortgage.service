@@ -1,0 +1,15 @@
+[Unit]
+Description=saas-mortgage Flask application
+After=network.target
+
+[Service]
+User=skunkbox
+Group=www-data
+WorkingDirectory=/home/skunkbox/saas-mortgage
+Environment="PATH=/home/skunkbox/saas-mortgage/.venv/bin"
+ExecStart=/home/skunkbox/saas-mortgage/.venv/bin/gunicorn --workers 2 --bind unix:/home/skunkbox/saas-mortgage/saas-mortgage.sock wsgi:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+

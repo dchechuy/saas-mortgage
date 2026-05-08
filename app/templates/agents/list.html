@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import icon, empty_state %}
+{% from "macros/user_avatar.html" import avatar %}
+{% block title %}AI Conversations - saas-mortgage{% endblock %}
+{% block content %}
+
+<div class="tax-tabs" style="margin-bottom:24px">
+  <a href="{{ url_for('agents.list_conversations') }}" class="tax-tab active">Conversations</a>
+  <a href="{{ url_for('agents.learning_center') }}" class="tax-tab">Learning Center</a>
+</div>
+
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">Conversations</h1>
+    <p class="muted" style="margin:4px 0 0">
+      {% if view_all %}Showing all team conversations.{% else %}Chat with your AI agents.{% endif %}
+    </p>
+  </div>
+  {# ── View All toggle ── #}
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:13px;color:var(--muted)">View All</span>
+    <a href="{{ url_for('agents.list_conversations') }}{% if not view_all %}?view=all{% endif %}"
+       style="display:inline-flex;align-items:center;text-decoration:none"
+       title="{{ 'Show only my conversations' if view_all else 'Show all team conversations' }}">
+      <div style="width:40px;height:22px;border-radius:11px;
+                  background:{{ 'var(--primary)' if view_all else 'var(--border)' }};
+                  position:relative;transition:background 0.2s;flex-shrink:0">
+        <div style="width:18px;height:18px;border-radius:50%;background:#fff;
+                    position:absolute;top:2px;
+                    left:{{ '20px' if view_all else '2px' }};
+                    transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>
+      </div>
+    </a>
+  </div>
+</div>
+
+{# ── Agent tiles ── #}
+{% if ai_agents %}
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
+  {% for agent in ai_agents %}
+  <form method="post" action="{{ url_for('agents.new_conversation') }}" style="margin:0">
+    <input type="hidden" name="agent_id" value="{{ agent.id }}">
+    <button type="submit" class="agent-tile">
+      {% if agent.avatar_filename %}
+      <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
+           class="agent-tile-avatar">
+      {% else %}
+      <div class="agent-tile-initial">{{ agent.name[0].upper() }}</div>
+      {% endif %}
+      <div class="agent-tile-body">
+        <div class="agent-tile-name">{{ agent.name }}</div>
+        {% if agent.description %}
+        <div class="agent-tile-desc">{{ agent.description }}</div>
+        {% endif %}
+      </div>
+    </button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Conversations list ── #}
+{% if conversations %}
+<div class="card" style="padding:0">
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table" style="margin:0">
+      <thead>
+        <tr>
+          <th style="width:52px"></th>
+          <th>Title</th>
+          <th>Agent</th>
+          <th>User</th>
+          <th>Last updated</th>
+          <th class="w-1"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for conv in conversations %}
+        <tr style="cursor:pointer" onclick="window.location='{{ url_for('agents.view_conversation', conversation_id=conv.id) }}'">
+          <td onclick="event.stopPropagation()">
+            {% if conv.agent and conv.agent.avatar_filename %}
+            <div style="width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0;
+                        border:2px solid var(--border)">
+              <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ conv.agent.avatar_filename) }}"
+                   style="width:100%;height:100%;object-fit:cover;display:block">
+            </div>
+            {% else %}
+            <div style="width:40px;height:40px;border-radius:50%;background:var(--accent);
+                        display:flex;align-items:center;justify-content:center;
+                        font-weight:700;font-size:16px;color:#fff;overflow:hidden">
+              {{ conv.agent.name[0].upper() if conv.agent else '?' }}
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('agents.view_conversation', conversation_id=conv.id) }}"
+               style="font-weight:600;color:var(--text);text-decoration:none"
+               onclick="event.stopPropagation()">
+              {{ conv.title or 'Untitled conversation' }}
+            </a>
+          </td>
+          <td style="font-size:13px;color:var(--muted)">
+            {{ conv.agent.name if conv.agent else '—' }}
+          </td>
+          <td>
+            {% if conv.user %}
+            <div style="display:flex;align-items:center;gap:8px">
+              {% if conv.user.avatar %}
+              <img src="{{ url_for('static', filename='uploads/avatars/' ~ conv.user.avatar) }}"
+                   style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0">
+              {% else %}
+              <div style="width:40px;height:40px;border-radius:50%;background:var(--accent);flex-shrink:0;
+                          display:flex;align-items:center;justify-content:center;
+                          font-weight:700;font-size:15px;color:#fff">
+                {{ (conv.user.first_name[:1] ~ conv.user.last_name[:1]).upper() if (conv.user.first_name or conv.user.last_name) else conv.user.username[:2].upper() }}
+              </div>
+              {% endif %}
+              <span style="font-size:13px;color:var(--muted)">{{ conv.user.display_name or conv.user.username }}</span>
+            </div>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <span class="local-time" data-utc="{{ conv.updated_at.isoformat() }}">
+              {{ conv.updated_at.strftime('%Y-%m-%d') }}
+            </span>
+          </td>
+          <td onclick="event.stopPropagation()">
+            <div class="overflow-menu">
+              <button class="overflow-btn" onclick="toggleMenu(event,'cmenu-{{ conv.id }}')">⋮</button>
+              <div class="overflow-dropdown" id="cmenu-{{ conv.id }}">
+                <a href="{{ url_for('agents.view_conversation', conversation_id=conv.id) }}"
+                   class="overflow-item">Open</a>
+                {% if conv.user_id == current_user.id %}
+                <div style="border-top:1px solid var(--border);margin:4px 0"></div>
+                <form method="post" action="{{ url_for('agents.archive_conversation', conversation_id=conv.id) }}"
+                      id="carchive-{{ conv.id }}" style="margin:0">
+                  <button type="button" class="overflow-item overflow-item-danger"
+                          onclick="confirmAction(
+                            'Archive conversation',
+                            'Archive this conversation? It will no longer appear in this list.',
+                            'carchive-{{ conv.id }}',
+                            'Archive',
+                            'btn-danger'
+                          )">Archive</button>
+                </form>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% elif not ai_agents %}
+<div class="card">
+  <div class="card-body" style="padding:64px 24px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--panel);border:1px solid var(--border);
+                display:flex;align-items:center;justify-content:center;
+                margin:0 auto 20px;font-size:28px;color:var(--muted)">
+      {{ icon('robot','') }}
+    </div>
+    <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px">No agents configured</div>
+    <div style="font-size:14px;color:var(--muted)">An admin must configure at least one AI agent before conversations are available.</div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+{% block title %}Learning Center - saas-mortgage{% endblock %}
+{% block content %}
+
+<div class="tax-tabs" style="margin-bottom:24px">
+  <a href="{{ url_for('agents.list_conversations') }}" class="tax-tab">Conversations</a>
+  <a href="{{ url_for('agents.learning_center') }}" class="tax-tab active">Learning Center</a>
+</div>
+
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">Learning Center</h1>
+    <p class="muted" style="margin:4px 0 0">Browse reference documents and resources.</p>
+  </div>
+</div>
+
+{# ── No integration configured ── #}
+{% if not integration %}
+<div class="card">
+  <div style="padding:64px 24px;text-align:center">
+    <div style="font-size:40px;margin-bottom:16px">📚</div>
+    <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px">No Documents integration configured</div>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:24px">
+      Add an integration with <strong>Use Case = Documents</strong> in System Config → External APIs.
+    </div>
+    {% if has_access('integrations', 'edit') %}
+    <a href="{{ url_for('models.list_models') }}#apis" class="btn btn-primary">Go to External APIs</a>
+    {% endif %}
+  </div>
+</div>
+
+{# ── API error ── #}
+{% elif error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;font-size:14px">
+  <strong>Could not load documents:</strong> {{ error }}
+</div>
+{{ empty_state("Documents unavailable", "Check your Documents integration configuration and try again.", "file") }}
+
+{# ── Empty collection ── #}
+{% elif not docs %}
+{{ empty_state("No documents found", "The document collection is empty.", "file") }}
+
+{# ── Document list ── #}
+{% else %}
+<div class="card" style="padding:0">
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table" style="margin:0">
+      <thead>
+        <tr>
+          <th style="width:36px"></th>
+          <th>Title</th>
+          <th>Collection</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th style="text-align:right">Pages</th>
+          <th>Uploaded</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in docs %}
+        {% set doc_id  = doc.get('id') or doc.get('document_id') %}
+        {% set ftype   = (doc.get('file_type') or doc.get('type') or '') | lower %}
+        {% set status  = (doc.get('status') or '') | lower %}
+        {% set doc_url = url_for('agents.learning_center_doc', doc_id=doc_id) %}
+        <tr style="cursor:pointer" onclick="window.location='{{ doc_url }}'">
+
+          {# File-type icon #}
+          <td>
+            {% if ftype == 'pdf' %}
+            <span style="color:#e53e3e;font-size:17px"><i class="fa-regular fa-file-pdf"></i></span>
+            {% elif ftype in ('doc','docx') %}
+            <span style="color:#2b6cb0;font-size:17px"><i class="fa-regular fa-file-word"></i></span>
+            {% elif ftype in ('xls','xlsx','csv') %}
+            <span style="color:#276749;font-size:17px"><i class="fa-regular fa-file-excel"></i></span>
+            {% elif ftype in ('png','jpg','jpeg','gif','webp') %}
+            <span style="color:#6b46c1;font-size:17px"><i class="fa-regular fa-file-image"></i></span>
+            {% elif ftype in ('txt','md') %}
+            <span style="color:var(--muted);font-size:17px"><i class="fa-regular fa-file-lines"></i></span>
+            {% else %}
+            <span style="color:var(--muted);font-size:17px"><i class="fa-regular fa-file"></i></span>
+            {% endif %}
+          </td>
+
+          {# Title #}
+          <td>
+            <a href="{{ doc_url }}"
+               style="font-weight:600;color:var(--text);text-decoration:none"
+               onclick="event.stopPropagation()">
+              {{ doc.get('title') or doc.get('name') or doc.get('filename') or '—' }}
+            </a>
+            {% set desc = doc.get('description') or '' %}
+            {% if desc %}
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">
+              {{ desc[:90] }}{% if desc | length > 90 %}…{% endif %}
+            </div>
+            {% endif %}
+          </td>
+
+          {# Collection #}
+          <td style="font-size:13px;color:var(--muted)">
+            {{ doc.get('collection_name') or doc.get('collection') or '—' }}
+          </td>
+
+          {# Type badge #}
+          <td>
+            {% if ftype %}
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;
+                         background:var(--panel-muted);color:var(--muted);
+                         padding:2px 8px;border-radius:4px;border:1px solid var(--border)">{{ ftype }}</span>
+            {% else %}—{% endif %}
+          </td>
+
+          {# Status badge #}
+          <td>
+            {% if status in ('processed','active','ready','published') %}
+            <span class="badge badge-active">{{ status | title }}</span>
+            {% elif status in ('processing','pending','indexing','uploading') %}
+            <span class="badge" style="background:#fef3c7;color:#92400e">{{ status | title }}</span>
+            {% elif status in ('failed','error') %}
+            <span class="badge badge-inactive">{{ status | title }}</span>
+            {% elif status %}
+            <span class="badge" style="background:var(--panel-muted);color:var(--muted)">{{ status | title }}</span>
+            {% else %}—{% endif %}
+          </td>
+
+          {# Pages #}
+          <td style="font-size:13px;color:var(--muted);text-align:right">
+            {{ doc.get('page_count') or doc.get('pages') or '—' }}
+          </td>
+
+          {# Date #}
+          <td>
+            {% set ts = doc.get('created_at') or doc.get('uploaded_at') %}
+            {% if ts %}
+            <span class="local-time" data-utc="{{ ts }}" data-format="date">{{ ts[:10] }}</span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Pagination ── #}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;font-size:13px;color:var(--muted)">
+  <div>
+    {% if total > 0 %}
+    Showing {{ ((page - 1) * per_page) + 1 }}–{{ (page * per_page) if (page * per_page) < total else total }} of {{ total }} document{{ 's' if total != 1 else '' }}
+    {% endif %}
+  </div>
+
+  {% if total_pages > 1 %}
+  <div style="display:flex;gap:4px;align-items:center">
+
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}" class="btn btn-secondary btn-sm">← Prev</a>
+    {% else %}
+    <button class="btn btn-secondary btn-sm" disabled>← Prev</button>
+    {% endif %}
+
+    {# Smart page range: always show first, last, and window around current #}
+    {% set ns = namespace(last_shown=0) %}
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+        {% if ns.last_shown > 0 and p > ns.last_shown + 1 %}
+        <span style="padding:0 2px;color:var(--muted)">…</span>
+        {% endif %}
+        <a href="?page={{ p }}"
+           class="btn btn-sm {{ 'btn-primary' if p == page else 'btn-secondary' }}"
+           style="min-width:34px">{{ p }}</a>
+        {% set ns.last_shown = p %}
+      {% endif %}
+    {% endfor %}
+
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}" class="btn btn-secondary btn-sm">Next →</a>
+    {% else %}
+    <button class="btn btn-secondary btn-sm" disabled>Next →</button>
+    {% endif %}
+
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}
+
+{% endblock %}

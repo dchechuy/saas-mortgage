@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}{{ (doc.get('title') or doc.get('name') or ('Document ' ~ doc_id)) if doc else ('Document ' ~ doc_id) }} - Learning Center{% endblock %}
+{% block content %}
+
+<div class="tax-tabs" style="margin-bottom:24px">
+  <a href="{{ url_for('agents.list_conversations') }}" class="tax-tab">Conversations</a>
+  <a href="{{ url_for('agents.learning_center') }}" class="tax-tab active">Learning Center</a>
+</div>
+
+<div style="margin-bottom:18px">
+  <a href="{{ url_for('agents.learning_center') }}"
+     style="font-size:13px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:5px">
+    <i class="fas fa-arrow-left" style="font-size:11px"></i> Back to Learning Center
+  </a>
+</div>
+
+{# ── Error state ── #}
+{% if error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;font-size:14px">
+  <strong>Could not load document:</strong> {{ error }}
+</div>
+
+{# ── Not found ── #}
+{% elif not doc %}
+<div class="card" style="padding:64px 24px;text-align:center">
+  <div style="font-size:40px;margin-bottom:12px">📄</div>
+  <div style="font-size:15px;font-weight:600;color:var(--text)">Document not found</div>
+</div>
+
+{# ── Document detail ── #}
+{% else %}
+
+{% set title   = doc.get('title') or doc.get('name') or doc.get('filename') or ('Document ' ~ doc_id) %}
+{% set ftype   = (doc.get('file_type') or doc.get('type') or '') | lower %}
+{% set status  = (doc.get('status') or '') | lower %}
+{% set doc_url = doc.get('download_url') or doc.get('url') or doc.get('file_url') or doc.get('source_url') %}
+
+{# ── Inspect versions list and current_version for a PDF entry ── #}
+{% set versions = doc.get('versions') or [] %}
+{% set current_version = doc.get('current_version') or {} %}
+{% set ns_ver = namespace(has_pdf=false, version_number='1') %}
+
+{# Check versions list #}
+{% for v in versions %}
+  {% set vfmt = (v.get('file_format') or v.get('format') or v.get('type') or '') | lower %}
+  {% if vfmt == 'pdf' %}
+    {% set ns_ver.has_pdf = true %}
+    {% if v.get('version_number') %}{% set ns_ver.version_number = v.get('version_number') | string %}{% endif %}
+  {% endif %}
+{% endfor %}
+
+{# Also check current_version dict #}
+{% if not ns_ver.has_pdf and current_version %}
+  {% if (current_version.get('file_format') or '') | lower == 'pdf' %}
+    {% set ns_ver.has_pdf = true %}
+    {% if current_version.get('version_number') %}
+      {% set ns_ver.version_number = current_version.get('version_number') | string %}
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+{# Also treat document as PDF if top-level file_type says so #}
+{% if not ns_ver.has_pdf and ftype == 'pdf' %}
+  {% set ns_ver.has_pdf = true %}
+{% endif %}
+
+{% set rag_page  = request.args.get('rag_page', '') %}
+{% set proxy_url = url_for('agents.learning_center_file', doc_id=doc_id, version=ns_ver.version_number) %}
+{# Append PDF page anchor if coming from a RAG source link #}
+{% set iframe_url = (proxy_url ~ '#page=' ~ rag_page) if rag_page else proxy_url %}
+
+{# ── Page header ── #}
+<div class="sb-page-header" style="margin-bottom:20px">
+  <div>
+    <h1 class="page-title" style="font-size:22px">{{ title }}</h1>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+      {% if ftype %}
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;
+                   background:var(--panel-muted);color:var(--muted);
+                   padding:2px 8px;border-radius:4px;border:1px solid var(--border)">{{ ftype }}</span>
+      {% endif %}
+      {% if status in ('processed','active','ready','published') %}
+      <span class="badge badge-active">{{ status | title }}</span>
+      {% elif status in ('processing','pending','indexing','uploading') %}
+      <span class="badge" style="background:#fef3c7;color:#92400e">{{ status | title }}</span>
+      {% elif status in ('failed','error') %}
+      <span class="badge badge-inactive">{{ status | title }}</span>
+      {% elif status %}
+      <span class="badge" style="background:var(--panel-muted);color:var(--muted)">{{ status | title }}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if doc_url or ns_ver.has_pdf %}
+  <a href="{{ proxy_url }}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">
+    <i class="fas fa-external-link-alt" style="margin-right:6px"></i>Open Document
+  </a>
+  {% endif %}
+</div>
+
+{# ── Two-column layout ── #}
+<div style="display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start">
+
+  {# ─── Left: Preview ─── #}
+  <div>
+    {% set preview = doc.get('content_preview') or doc.get('preview') or doc.get('content') or doc.get('text') %}
+
+    {% if preview %}
+    {# Text / markdown preview #}
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:11px 20px;border-bottom:1px solid var(--border)">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.5px;color:var(--muted)">Preview</span>
+      </div>
+      <div style="padding:24px 28px;max-height:660px;overflow-y:auto">
+        <pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;
+                    font-size:14px;line-height:1.75;color:var(--text);margin:0">{{ preview }}</pre>
+      </div>
+    </div>
+
+    {% elif ns_ver.has_pdf or ftype == 'pdf' %}
+    {# PDF embed via proxy route #}
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:11px 20px;border-bottom:1px solid var(--border)">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.5px;color:var(--muted)">Preview</span>
+      </div>
+      <iframe src="{{ iframe_url }}" style="width:100%;height:680px;border:none;display:block"
+              title="{{ title }}"></iframe>
+    </div>
+
+    {% elif doc_url and ftype in ('png','jpg','jpeg','gif','webp') %}
+    {# Image preview #}
+    <div class="card" style="padding:24px;text-align:center">
+      <img src="{{ doc_url }}" alt="{{ title }}"
+           style="max-width:100%;height:auto;border-radius:8px;box-shadow:var(--shadow)">
+    </div>
+
+    {% else %}
+    {# No preview available #}
+    <div class="card" style="padding:64px 24px;text-align:center">
+      <div style="font-size:52px;margin-bottom:16px;color:var(--muted)">
+        {% if ftype == 'pdf' %}<i class="fa-regular fa-file-pdf"></i>
+        {% elif ftype in ('doc','docx') %}<i class="fa-regular fa-file-word"></i>
+        {% elif ftype in ('xls','xlsx','csv') %}<i class="fa-regular fa-file-excel"></i>
+        {% elif ftype in ('png','jpg','jpeg','gif','webp') %}<i class="fa-regular fa-file-image"></i>
+        {% else %}<i class="fa-regular fa-file"></i>{% endif %}
+      </div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">No preview available</div>
+      <div style="font-size:13px;color:var(--muted)">No download link provided by the API.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ─── Right: Metadata ─── #}
+  <div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:11px 20px;border-bottom:1px solid var(--border)">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.5px;color:var(--muted)">Document Info</span>
+      </div>
+
+      {# Ordered "known" fields with nice labels #}
+      {% set known_fields = [
+        ('id',              'ID'),
+        ('title',           'Title'),
+        ('name',            'Name'),
+        ('filename',        'Filename'),
+        ('file_type',       'File Type'),
+        ('type',            'Type'),
+        ('status',          'Status'),
+        ('description',     'Description'),
+        ('collection_id',   'Collection ID'),
+        ('collection_name', 'Collection'),
+        ('collection',      'Collection'),
+        ('page_count',      'Pages'),
+        ('pages',           'Pages'),
+        ('chunk_count',     'Chunks'),
+        ('chunks',          'Chunks'),
+        ('word_count',      'Words'),
+        ('file_size',       'File Size'),
+        ('size',            'File Size'),
+        ('language',        'Language'),
+        ('author',          'Author'),
+        ('source',          'Source'),
+        ('tags',            'Tags'),
+        ('created_at',      'Created'),
+        ('uploaded_at',     'Uploaded'),
+        ('updated_at',      'Updated'),
+        ('processed_at',    'Processed'),
+        ('is_active',       'Active'),
+        ('collections',     'Collections'),
+        ('versions',        'Versions'),
+      ] %}
+
+      {# Fields to skip entirely (large text, URLs rendered elsewhere) #}
+      {% set skip_keys = [
+        'content_preview','content','preview','text',
+        'download_url','file_url','url','source_url',
+      ] %}
+
+      {# Collect keys shown in the known pass so we can show remainders after #}
+      {% set ns = namespace(shown=[]) %}
+
+      {# ── Macro: render a single metadata value cleanly ── #}
+      {% macro render_val(field_key, val) %}
+        {% if val is sameas true %}
+          <span class="badge badge-active">Yes</span>
+        {% elif val is sameas false %}
+          <span style="color:var(--muted)">No</span>
+        {% elif field_key.endswith('_at') and val is string %}
+          <span class="local-time" data-utc="{{ val }}">{{ val[:10] }}</span>
+        {% elif field_key in ('file_size','size') and val is number %}
+          {% if val >= 1048576 %}{{ "%.1f" | format(val / 1048576) }} MB
+          {% elif val >= 1024 %}{{ "%.1f" | format(val / 1024) }} KB
+          {% else %}{{ val }} B{% endif %}
+        {% elif val is mapping %}
+          {# Dict: show name/title if present, else key=val pairs #}
+          {% if val.get('name') or val.get('title') %}
+            {{ val.get('name') or val.get('title') }}
+            {% if val.get('id') %} <span style="color:var(--muted);font-size:11px">(id: {{ val.get('id') }})</span>{% endif %}
+          {% else %}
+            {% for k, v in val.items() %}{{ k }}: {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}
+          {% endif %}
+        {% elif val is iterable and val is not string %}
+          {# List: if items are dicts, render each on its own line; otherwise join #}
+          {% set first_item = val | first if val else none %}
+          {% if first_item is mapping %}
+            {% for item in val %}
+              <div style="{% if not loop.first %}margin-top:6px;padding-top:6px;border-top:1px solid var(--border-soft){% endif %}">
+                {# Version-style row: format · size · filename #}
+                {% set fmt  = item.get('file_format') or item.get('format') or item.get('type') or '' %}
+                {% set sz   = item.get('file_size') or item.get('size') %}
+                {% set fname= item.get('filename') or item.get('file_name') or item.get('name') or '' %}
+                {% set ver  = item.get('version') or item.get('version_number') %}
+                {% if ver %}<span style="font-weight:600">v{{ ver }}</span> · {% endif %}
+                {% if fmt %}<span style="text-transform:uppercase;font-size:11px;font-weight:600;
+                  background:var(--panel-muted);color:var(--muted);padding:1px 6px;
+                  border-radius:3px;border:1px solid var(--border)">{{ fmt }}</span>{% endif %}
+                {% if sz %}
+                  · {% if sz >= 1048576 %}{{ "%.1f" | format(sz / 1048576) }} MB
+                    {% elif sz >= 1024 %}{{ "%.1f" | format(sz / 1024) }} KB
+                    {% else %}{{ sz }} B{% endif %}
+                {% endif %}
+                {% if fname %} · <span style="color:var(--muted)">{{ fname }}</span>{% endif %}
+                {# Fallback for anything else in the dict #}
+                {% if not fmt and not sz and not fname %}
+                  {% for k, v in item.items() %}{{ k }}: {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% else %}
+            {{ val | join(', ') }}
+          {% endif %}
+        {% else %}
+          {{ val }}
+        {% endif %}
+      {% endmacro %}
+
+      {% for field_key, field_label in known_fields %}
+        {% if field_key in doc and doc[field_key] is not none and doc[field_key] != '' %}
+          {% if field_key not in ns.shown %}
+            {% set ns.shown = ns.shown + [field_key] %}
+            <div style="display:flex;align-items:flex-start;gap:12px;
+                        padding:9px 20px;border-bottom:1px solid var(--border-soft)">
+              <div style="min-width:100px;flex-shrink:0;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.3px;
+                          color:var(--muted);padding-top:1px">{{ field_label }}</div>
+              <div style="flex:1;font-size:13px;color:var(--text);word-break:break-word">
+                {{ render_val(field_key, doc[field_key]) }}
+              </div>
+            </div>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+
+      {# Any remaining fields not in known list #}
+      {% for key, val in doc.items() %}
+        {% if key not in ns.shown and key not in skip_keys
+              and val is not none and val != '' %}
+          <div style="display:flex;align-items:flex-start;gap:12px;
+                      padding:9px 20px;border-bottom:1px solid var(--border-soft)">
+            <div style="min-width:100px;flex-shrink:0;font-size:11px;font-weight:700;
+                        text-transform:uppercase;letter-spacing:0.3px;
+                        color:var(--muted);padding-top:1px">
+              {{ key | replace('_', ' ') | title }}
+            </div>
+            <div style="flex:1;font-size:13px;color:var(--text);word-break:break-word">
+              {{ render_val(key, val) }}
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
+{% endblock %}

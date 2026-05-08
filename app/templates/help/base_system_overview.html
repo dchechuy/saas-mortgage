@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}System Overview - saas-mortgage{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+  <div class="nav nav-pills flex-wrap ds-tab-strip" style="margin-bottom:0">
+    <a href="{{ url_for('help.architecture') }}"  class="nav-link {% if active_tab == 'architecture' %}active{% endif %}">Architecture Overview</a>
+    <a href="{{ url_for('help.dependencies') }}"  class="nav-link {% if active_tab == 'dependencies' %}active{% endif %}">Python Dependencies</a>
+  </div>
+  {% block tab_actions %}{% endblock %}
+</div>
+
+{% if page_title %}
+<div class="sb-page-header" style="margin-bottom:20px">
+  <div>
+    <h1 class="page-title">{{ page_title }}</h1>
+    {% if page_description %}<p class="muted" style="margin:4px 0 0">{{ page_description }}</p>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% block help_content %}{% endblock %}
+{% endblock %}

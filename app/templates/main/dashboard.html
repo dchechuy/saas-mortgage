@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state, page_header, stat_card %}
+{% block title %}Dashboard - saas-mortgage{% endblock %}
+{% block page_heading %}Dashboard{% endblock %}
+{% block content %}
+{{ page_header(
+  "Launchpad Dashboard",
+  "Foundation Layer",
+  "A confident starting shell for every future SaaS prototype. Keep the structure durable and swap in product-specific workflows as each new system evolves."
+) }}
+
+<div class="row row-deck row-cards">
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Users", stats.users, "users", "teal", "Active workspace members") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Roles", stats.roles, "shield", "gold", "Reusable permission models") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("LLM Models", stats.models, "brain", "plum", "Configured model endpoints") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Integrations", stats.integrations, "plug", "blue", "Third-party platform connections") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Attributes", stats.attributes, "tags", "coral", "Reusable business classifications") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Release Notes", stats.releases, "sparkles", "mint", "Version history and product comms") }}
+  </div>
+</div>
+
+<div class="row row-cards mt-1">
+  <div class="col-lg-7">
+    <div class="card ds-feature-card">
+      <div class="card-body">
+        <div class="ds-feature-eyebrow">Design System Direction</div>
+        <h3 class="card-title mb-2">Persistent product shell for every new build</h3>
+        <p class="text-secondary mb-0">This template now separates the visual system from the product specifics. New projects should keep the shell, cards, forms, tables, navigation, and empty states consistent while replacing the domain content inside them.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card ds-feature-card ds-feature-card-alt">
+      <div class="card-body">
+        <div class="ds-feature-eyebrow">Practical Next Step</div>
+        <h3 class="card-title mb-2">Turn this into your GitHub template repo</h3>
+        <p class="text-secondary mb-0">Once the foundation feels right, each new customer project can start from the same polished admin skeleton instead of reinventing infrastructure every time.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header">
+    <h3 class="card-title">Recent Release Notes</h3>
+  </div>
+  {% if recent_releases %}
+  <div class="ds-table-shell">
+    <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Type</th>
+          <th>Title</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for note in recent_releases %}
+        <tr>
+          <td class="text-nowrap">v{{ note.version_string }}</td>
+          <td><span class="badge text-bg-primary-lt">{{ note.release_type }}</span></td>
+          <td>{{ note.title }}</td>
+          <td class="text-secondary">
+            <span class="local-time" data-utc="{{ note.created_at.isoformat() }}">{{ note.created_at.strftime('%Y-%m-%d') }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card-body">
+    {{ empty_state("No release notes yet", "Use the Help area to publish your first version update and start building product memory.", "sparkles") }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

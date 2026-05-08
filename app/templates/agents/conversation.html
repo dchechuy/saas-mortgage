@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import icon %}
+{% block title %}{{ conv.title or agent.name }} - saas-mortgage{% endblock %}
+{% block content %}
+
+{# ── Conversation header ── #}
+<div class="sb-page-header" style="margin-bottom:16px">
+  <div style="display:flex;align-items:center;gap:14px">
+    {% if agent.avatar_filename %}
+    <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
+         style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid var(--border);flex-shrink:0">
+    {% else %}
+    <div style="width:44px;height:44px;border-radius:50%;background:var(--accent);flex-shrink:0;
+                display:flex;align-items:center;justify-content:center;
+                font-weight:700;font-size:18px;color:#fff">
+      {{ agent.name[0].upper() }}
+    </div>
+    {% endif %}
+    <div>
+      <h1 class="page-title" style="margin:0">{{ conv.title or agent.name }}</h1>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">{{ agent.name }}</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <form method="post" action="{{ url_for('agents.archive_conversation', conversation_id=conv.id) }}"
+          id="conv-archive-form" style="margin:0">
+      <button type="button" class="btn btn-secondary btn-sm"
+              onclick="confirmAction(
+                'Archive conversation',
+                'Archive this conversation? It will no longer appear in your list.',
+                'conv-archive-form',
+                'Archive',
+                'btn-danger'
+              )">Archive</button>
+    </form>
+  </div>
+</div>
+
+{# ── Chat window ── #}
+<div class="card" style="padding:0;display:flex;flex-direction:column;height:calc(100vh - 220px);min-height:400px">
+
+  {# Message thread #}
+  <div id="chat-messages" style="flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+
+    {% if not messages %}
+    <div style="text-align:center;padding:48px 24px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:12px">💬</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">Start the conversation</div>
+      <div style="font-size:13px">Send a message to {{ agent.name }} below.</div>
+    </div>
+    {% endif %}
+
+    {% for msg in messages_data %}
+    {% if msg.role == 'user' %}
+    <div class="chat-bubble-wrap chat-bubble-wrap--user">
+      <div class="chat-bubble chat-bubble--user">
+        <div class="chat-bubble-content">{{ msg.content }}</div>
+        <div class="chat-bubble-time">
+          <span class="local-time" data-utc="{{ msg.created_at }}" data-format="time">
+            {{ msg.created_at[:16] | replace('T',' ') }}
+          </span>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="chat-bubble-wrap chat-bubble-wrap--agent">
+      <div class="chat-bubble-avatar">
+        {% if agent.avatar_filename %}
+        <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
+             style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid var(--border)">
+        {% else %}
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);
+                    display:flex;align-items:center;justify-content:center;
+                    font-weight:700;font-size:13px;color:#fff;flex-shrink:0">
+          {{ agent.name[0].upper() }}
+        </div>
+        {% endif %}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
+        <div class="chat-bubble chat-bubble--agent">
+          <div class="chat-bubble-content chat-markdown" data-raw="{{ msg.content | e }}"></div>
+          <div class="chat-bubble-time">
+            <span class="local-time" data-utc="{{ msg.created_at }}" data-format="time">
+              {{ msg.created_at[:16] | replace('T',' ') }}
+            </span>
+          </div>
+        </div>
+        {% if msg.rag_sources %}
+        <button class="rag-pill" onclick="openRagModal({{ msg.id }})"
+                title="View sources used for this answer">
+          📎 {{ msg.rag_sources | length }} source{{ 's' if msg.rag_sources | length != 1 else '' }}
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {# Typing indicator (hidden by default) #}
+    <div id="typing-indicator" class="chat-bubble-wrap chat-bubble-wrap--agent" style="display:none">
+      <div class="chat-bubble-avatar">
+        {% if agent.avatar_filename %}
+        <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
+             style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid var(--border)">
+        {% else %}
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);
+                    display:flex;align-items:center;justify-content:center;
+                    font-weight:700;font-size:13px;color:#fff;flex-shrink:0">
+          {{ agent.name[0].upper() }}
+        </div>
+        {% endif %}
+      </div>
+      <div class="chat-bubble chat-bubble--agent">
+        <div class="chat-typing-dots"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  </div>
+
+  {# Input bar #}
+  <div style="border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:flex-end;flex-shrink:0">
+    <textarea id="chat-input" class="form-control"
+              placeholder="Message {{ agent.name }}…"
+              rows="1"
+              style="resize:none;overflow:hidden;max-height:140px;line-height:1.5;padding:10px 14px"
+              onkeydown="handleChatKey(event)"
+              oninput="autoGrow(this)"></textarea>
+    <button id="chat-send-btn" class="btn btn-primary"
+            style="flex-shrink:0;padding:10px 18px;align-self:flex-end"
+            onclick="sendMessage()">
+      {{ icon('send') }}
+    </button>
+  </div>
+</div>
+
+{# ── RAG Sources Modal ── #}
+<div id="rag-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);
+     align-items:center;justify-content:center;z-index:1060;padding:24px"
+     onclick="if(event.target===this)closeRagModal()">
+  <div style="background:var(--panel);border-radius:12px;width:100%;max-width:700px;
+              box-shadow:0 8px 40px rgba(0,0,0,0.25);display:flex;flex-direction:column;
+              max-height:85vh" onclick="event.stopPropagation()">
+
+    <div style="padding:22px 28px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <h2 style="font-size:15px;font-weight:700;color:var(--text);margin:0">Sources used for this answer</h2>
+    </div>
+
+    <div id="rag-sources-body"
+         style="padding:16px 28px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px">
+    </div>
+
+    <div style="padding:14px 28px 20px;border-top:1px solid var(--border);flex-shrink:0;display:flex;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeRagModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+{# ── RAG sources data store — safe: lives in a script block, never in an HTML attribute ── #}
+<script>
+const RAG_SOURCES = {
+  {% for msg in messages_data %}{% if msg.rag_sources %}
+  {{ msg.id }}: {{ msg.rag_sources | tojson }},
+  {% endif %}{% endfor %}
+};
+// Base URL template for linking to Learning Center doc detail
+const LC_DOC_URL_TPL = {{ url_for('agents.learning_center_doc', doc_id='__DOC_ID__') | tojson }};
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const SEND_URL = {{ url_for('agents.send_message', conversation_id=conv.id) | tojson }};
+
+// Render existing markdown bubbles on load
+document.querySelectorAll('.chat-markdown[data-raw]').forEach(el => {
+  el.innerHTML = marked.parse(el.dataset.raw || '');
+  el.removeAttribute('data-raw');
+});
+
+function scrollToBottom() {
+  const el = document.getElementById('chat-messages');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+scrollToBottom();
+
+function autoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = String(str || '');
+  return d.innerHTML;
+}
+
+function docPageUrl(docId, pageNumber) {
+  const base = LC_DOC_URL_TPL.replace('__DOC_ID__', encodeURIComponent(docId));
+  return pageNumber > 0 ? base + '?rag_page=' + pageNumber : base;
+}
+
+/* ── Bubble builders ── */
+function appendUserBubble(text) {
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-bubble-wrap chat-bubble-wrap--user';
+  wrap.innerHTML = `
+    <div class="chat-bubble chat-bubble--user">
+      <div class="chat-bubble-content">${escHtml(text)}</div>
+      <div class="chat-bubble-time" style="font-size:11px;color:rgba(255,255,255,0.7);text-align:right;margin-top:4px">
+        ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+      </div>
+    </div>`;
+  document.getElementById('chat-messages').appendChild(wrap);
+  scrollToBottom();
+}
+
+function appendAgentBubble(content, ragSources, msgId) {
+  const agentAvatarHtml = {{ (('<img src="' ~ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) ~ '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid var(--border)">') if agent.avatar_filename else ('<div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;flex-shrink:0">' ~ agent.name[0].upper() ~ '</div>')) | tojson }};
+
+  if (msgId && ragSources && ragSources.length) {
+    RAG_SOURCES[msgId] = ragSources;
+  }
+
+  const ragPillHtml = (ragSources && ragSources.length && msgId)
+    ? `<button class="rag-pill" onclick="openRagModal(${msgId})" title="View sources used for this answer">
+         📎 ${ragSources.length} source${ragSources.length !== 1 ? 's' : ''}
+       </button>`
+    : '';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-bubble-wrap chat-bubble-wrap--agent';
+  wrap.innerHTML = `
+    <div class="chat-bubble-avatar">${agentAvatarHtml}</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
+      <div class="chat-bubble chat-bubble--agent">
+        <div class="chat-bubble-content">${marked.parse(content || '')}</div>
+        <div class="chat-bubble-time" style="font-size:11px;color:var(--muted);margin-top:4px">
+          ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+        </div>
+      </div>
+      ${ragPillHtml}
+    </div>`;
+  document.getElementById('chat-messages').appendChild(wrap);
+  scrollToBottom();
+}
+
+function setLoading(on) {
+  document.getElementById('chat-send-btn').disabled = on;
+  document.getElementById('chat-input').disabled = on;
+  document.getElementById('typing-indicator').style.display = on ? 'flex' : 'none';
+  if (on) scrollToBottom();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  autoGrow(input);
+  appendUserBubble(text);
+  setLoading(true);
+
+  try {
+    const res  = await fetch(SEND_URL, {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({message: text}),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (data.ok) {
+      appendAgentBubble(
+        data.assistant.content,
+        data.assistant.rag_sources || [],
+        data.assistant.id
+      );
+    } else {
+      appendAgentBubble('⚠️ Error: ' + (data.error || 'Unknown error'), [], null);
+    }
+  } catch (err) {
+    setLoading(false);
+    appendAgentBubble('⚠️ Network error: ' + err.message, [], null);
+  }
+}
+
+/* ── RAG Sources Modal ── */
+function scoreLabel(score) {
+  if (score >= 80) return { bg: '#dcfce7', color: '#166534', text: 'Very relevant' };
+  if (score >= 60) return { bg: '#dbeafe', color: '#1e40af', text: 'Relevant' };
+  return                  { bg: '#f1f5f9', color: '#475569', text: 'Partial match' };
+}
+
+function openRagModal(msgId) {
+  const sources = RAG_SOURCES[msgId] || [];
+  const body    = document.getElementById('rag-sources-body');
+  body.innerHTML = '';
+
+  if (!sources.length) {
+    body.innerHTML = '<p style="color:var(--muted);font-size:13px">No sources recorded.</p>';
+  } else {
+    sources.forEach(src => {
+      const simScore   = src.similarity_score ?? 0;
+      const relScore   = src.relevance_score  ?? simScore;
+      const isReranked = src.reranked === true;
+      const lbl        = scoreLabel(simScore);
+      const relDiff    = relScore - simScore;
+      const relColor   = relDiff > 2 ? '#166534' : relDiff < -2 ? '#92400e' : '#475569';
+      const relBg      = relDiff > 2 ? '#dcfce7' : relDiff < -2 ? '#fef3c7' : '#f1f5f9';
+
+      const scoreHtml = isReranked
+        ? `<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;
+                        background:${lbl.bg};color:${lbl.color}">Sim: ${simScore}%</span>
+           <span style="font-size:11px;color:var(--muted)">→</span>
+           <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;
+                        background:${relBg};color:${relColor}"
+                 title="Relevance after re-ranking">Rel: ${relScore}%</span>`
+        : `<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;
+                        background:${lbl.bg};color:${lbl.color}">${simScore}% · ${lbl.text}</span>`;
+
+      const viewLink = src.document_id
+        ? `<a href="${escHtml(docPageUrl(src.document_id, src.page_number || 0))}"
+              target="_blank" rel="noopener"
+              style="font-size:12px;color:var(--accent);margin-left:auto;white-space:nowrap;
+                     text-decoration:none;font-weight:500">
+             View document →
+           </a>`
+        : '';
+
+      const card = document.createElement('div');
+      card.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:14px 16px';
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:700;color:var(--text)">
+            ${escHtml(src.document_title || 'Unknown document')}
+          </span>
+          ${src.version_number
+            ? `<span style="font-size:11px;font-weight:600;color:#6366f1;background:#eef2ff;
+                            padding:2px 7px;border-radius:4px">v${src.version_number}</span>`
+            : ''}
+          ${src.page_number > 0
+            ? `<span style="font-size:11px;color:var(--muted);background:var(--panel-muted);
+                            padding:2px 7px;border-radius:4px;border:1px solid var(--border)">
+                 p.&nbsp;${src.page_number}
+               </span>`
+            : ''}
+          ${scoreHtml}
+          ${viewLink}
+        </div>
+        ${src.chunk_text
+          ? `<div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;
+                         padding:10px 12px;font-size:12px;line-height:1.6;color:var(--muted);
+                         font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">
+               ${escHtml(src.chunk_text)}
+             </div>`
+          : ''}
+      `;
+      body.appendChild(card);
+    });
+  }
+
+  document.getElementById('rag-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeRagModal() {
+  document.getElementById('rag-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRagModal(); });
+</script>
+
+<style>
+.rag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 3px 10px;
+  background: var(--panel-muted, #f1f5f9);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.rag-pill:hover {
+  background: var(--sidebar-hover, #e8edf5);
+  border-color: var(--accent);
+}
+</style>
+{% endblock %}

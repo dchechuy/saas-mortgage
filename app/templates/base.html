@@ -1,0 +1,306 @@
+{% from "macros/user_avatar.html" import avatar %}
+{% from "macros/ui.html" import icon %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}saas-mortgage{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon-96x96.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+  <script>
+    (function () {
+      const stored = localStorage.getItem("saas-mortgage-theme");
+      const systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = stored || (systemDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-bs-theme", theme);
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand" onclick="toggleSidebar()" title="Toggle sidebar">
+      <img class="brand-mark" src="{{ url_for('static', filename='web-app-manifest-192x192.png') }}" alt="saas-mortgage logo">
+      <div class="sidebar-brand-copy">
+        <div class="sidebar-brand-title">saas-mortgage</div>
+        <div class="sidebar-brand-subtitle">Prototype foundation</div>
+      </div>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="nav-section-label">General</div>
+      <a href="{{ url_for('main.dashboard') }}"
+         class="{{ 'active' if request.endpoint == 'main.dashboard' else '' }}"
+         data-label="Dashboard">
+        <span class="nav-icon">{{ icon('dashboard') }}</span>
+        <span class="nav-label">Dashboard</span>
+      </a>
+
+      {% if has_access('agents', 'view') and flag_ai_agents_section %}
+      <div class="nav-section-label">AI Agents</div>
+      {% if flag_conversations %}
+      <a href="{{ url_for('agents.list_conversations') }}"
+         class="{{ 'active' if request.endpoint in ['agents.list_conversations', 'agents.view_conversation', 'agents.new_conversation'] else '' }}"
+         data-label="Conversations">
+        <span class="nav-icon">{{ icon('message') }}</span>
+        <span class="nav-label">Conversations</span>
+      </a>
+      {% endif %}
+      {% if flag_learning_center %}
+      <a href="{{ url_for('agents.learning_center') }}"
+         class="{{ 'active' if request.endpoint in ['agents.learning_center', 'agents.learning_center_doc'] else '' }}"
+         data-label="Learning Center">
+        <span class="nav-icon">{{ icon('book') }}</span>
+        <span class="nav-label">Learning Center</span>
+      </a>
+      {% endif %}
+      {% endif %}
+
+      {% if has_access('users', 'view') or has_access('permissions', 'view') or has_access('models', 'view') or has_access('attributes', 'view') or has_access('integrations', 'view') %}
+      <div class="nav-section-label">Administration</div>
+      {% if has_access('users', 'view') or has_access('permissions', 'view') %}
+      <a href="{{ url_for('users.list_users') }}"
+         class="{{ 'active' if request.endpoint in ['users.list_users', 'users.add_user', 'users.edit_user', 'users.change_password'] else '' }}"
+         data-label="User Management">
+        <span class="nav-icon">{{ icon('users') }}</span>
+        <span class="nav-label">User Management</span>
+      </a>
+      {% endif %}
+      {% if has_access('attributes', 'view') or has_access('agents', 'view') %}
+      <a href="{{ url_for('models.list_models') }}"
+         class="{{ 'active' if request.endpoint == 'models.list_models' else '' }}"
+         data-label="System Config">
+        <span class="nav-icon">{{ icon('tags') }}</span>
+        <span class="nav-label">System Config</span>
+      </a>
+      {% endif %}
+      {% if has_access('reporting', 'view') %}
+      <a href="{{ url_for('reporting.index') }}"
+         class="{{ 'active' if request.endpoint == 'reporting.index' else '' }}"
+         data-label="Reporting">
+        <span class="nav-icon">{{ icon('chart') }}</span>
+        <span class="nav-label">Reporting</span>
+      </a>
+      {% endif %}
+      {% endif %}
+
+      {% if has_access('help', 'view') %}
+      <div class="nav-section-label">Documentation</div>
+      <a href="{{ url_for('help.release_notes') }}"
+         class="{{ 'active' if request.endpoint in ['help.release_notes', 'help.quick_start', 'help.user_manual'] else '' }}"
+         data-label="User Guides">
+        <span class="nav-icon">{{ icon('book') }}</span>
+        <span class="nav-label">User Guides</span>
+      </a>
+      {% if flag_system_overview %}
+      <a href="{{ url_for('help.architecture') }}"
+         class="{{ 'active' if request.endpoint in ['help.architecture', 'help.dependencies'] else '' }}"
+         data-label="System Overview">
+        <span class="nav-icon">{{ icon('brain') }}</span>
+        <span class="nav-label">System Overview</span>
+      </a>
+      {% endif %}
+      {% endif %}
+    </div>
+  </nav>
+
+  <!-- Floating nav tooltip (collapsed sidebar) -->
+  <div id="nav-tooltip"></div>
+
+  <div class="main">
+    <header class="header">
+      <nav class="breadcrumb-nav" aria-label="breadcrumb">
+        {% if breadcrumbs %}
+          {% for crumb in breadcrumbs %}
+            {% if crumb.url %}
+              <a href="{{ crumb.url }}" class="breadcrumb-link">{{ crumb.label }}</a>
+            {% else %}
+              <span class="breadcrumb-current">{{ crumb.label }}</span>
+            {% endif %}
+            {% if not loop.last %}<span class="breadcrumb-sep"> &gt; </span>{% endif %}
+          {% endfor %}
+        {% endif %}
+      </nav>
+
+      <div class="header-user">
+        {% if current_user.is_authenticated %}
+
+        <div class="user-menu-wrap" id="user-menu-wrap">
+
+          {# ── Trigger: avatar circle only ── #}
+          <button id="user-menu-btn" class="user-avatar-btn" type="button" onclick="toggleUserMenu(event)">
+            {{ avatar(current_user, 'md') }}
+          </button>
+
+          {# ── Dropdown panel ── #}
+          <div id="user-menu-dropdown" class="user-dropdown">
+
+            {# Large avatar centered with edit-pencil overlay #}
+            <div style="display:flex;flex-direction:column;align-items:center;padding:22px 20px 14px">
+              <div style="position:relative;width:72px;height:72px;margin-bottom:10px">
+                {{ avatar(current_user, 'lg') }}
+                <label for="avatar-upload-input" title="Update picture"
+                       style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;
+                              border-radius:50%;background:var(--accent);color:#fff;
+                              display:flex;align-items:center;justify-content:center;
+                              cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25);font-size:11px">✏️</label>
+                <form id="avatar-upload-form" method="post"
+                      action="{{ url_for('users.upload_avatar_self') }}"
+                      enctype="multipart/form-data" style="display:none">
+                  <input id="avatar-upload-input" type="file" name="avatar"
+                         accept=".jpg,.jpeg,.png,.gif,.webp"
+                         onchange="document.getElementById('avatar-upload-form').submit()"
+                         style="display:none">
+                </form>
+              </div>
+            </div>
+
+            {# Name + @username + role pill #}
+            <div style="text-align:center;padding:0 20px 16px;border-bottom:1px solid var(--border)">
+              <div style="font-size:15px;font-weight:700;color:var(--text);
+                          white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                {{ current_user.display_name }}
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">
+                @{{ current_user.username }}
+              </div>
+              <div style="margin-top:10px">
+                {% if current_user.role == 'admin' %}
+                <span style="background:#ede9fe;color:#5b21b6;padding:2px 10px;
+                             border-radius:10px;font-size:11px;font-weight:600">Admin</span>
+                {% else %}
+                <span style="background:var(--panel);color:var(--muted);padding:2px 10px;
+                             border-radius:10px;font-size:11px;font-weight:600;
+                             border:1px solid var(--border)">{{ current_user.role | capitalize }}</span>
+                {% endif %}
+              </div>
+            </div>
+
+            {# Action links #}
+            <div style="padding:12px 16px;display:flex;flex-direction:column;gap:4px">
+
+              <button type="button" id="theme-toggle" aria-label="Toggle theme"
+                      class="user-menu-action">
+                <i class="fa-solid fa-moon"></i>
+                <span class="ds-theme-toggle-label">Dark mode</span>
+              </button>
+
+              <a href="{{ url_for('users.change_password') }}" class="user-menu-action">
+                {{ icon('shield', 'icon') }}
+                Change Password
+              </a>
+
+              <form method="post" action="{{ url_for('auth.logout') }}" style="margin:0">
+                <button type="submit" class="user-menu-action" style="width:100%">
+                  Log out
+                </button>
+              </form>
+
+            </div>
+          </div>
+        </div>
+
+        {% endif %}
+      </div>
+    </header>
+
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="flash {{ category }}">{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+{# ── Global confirmation modal ─────────────────────────────── #}
+<div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);
+     align-items:center;justify-content:center;z-index:1050;padding:24px"
+     onclick="if(event.target===this)closeConfirmModal()">
+  <div style="background:var(--panel);border-radius:12px;width:100%;max-width:420px;
+              box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div style="padding:28px 32px 20px">
+      <h2 id="confirm-modal-title" style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px"></h2>
+      <p  id="confirm-modal-body"  style="font-size:14px;color:var(--muted);line-height:1.6;margin:0"></p>
+    </div>
+    <div style="display:flex;gap:10px;padding:16px 32px 24px;flex-direction:row-reverse">
+      <button id="confirm-modal-action" class="btn btn-danger"></button>
+      <button type="button" class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+<script>
+function confirmAction(title, body, formId, actionText, actionClass) {
+  document.getElementById('confirm-modal-title').textContent = title;
+  document.getElementById('confirm-modal-body').textContent  = body;
+  const btn = document.getElementById('confirm-modal-action');
+  btn.textContent = actionText || 'Confirm';
+  btn.className   = 'btn ' + (actionClass || 'btn-danger');
+  btn.onclick = function () { closeConfirmModal(); document.getElementById(formId).submit(); };
+  const modal = document.getElementById('confirm-modal');
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeConfirmModal() {
+  document.getElementById('confirm-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeConfirmModal();
+});
+</script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    const SIDEBAR_KEY = 'saas-mortgage-sidebar-collapsed';
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const collapsed = sidebar.classList.toggle('collapsed');
+      localStorage.setItem(SIDEBAR_KEY, collapsed);
+    }
+
+    // Apply persisted state after DOM is ready (sidebar-pre-collapsed was set in <head>)
+    (function () {
+      if (localStorage.getItem(SIDEBAR_KEY) === 'true') {
+        const s = document.getElementById('sidebar');
+        if (s) s.classList.add('collapsed');
+      }
+    })();
+
+    // Floating tooltip for collapsed nav items
+    const navTooltip = document.getElementById('nav-tooltip');
+    document.querySelectorAll('.sidebar-nav a[data-label]').forEach(function(link) {
+      link.addEventListener('mouseenter', function(e) {
+        if (!document.getElementById('sidebar').classList.contains('collapsed')) return;
+        const rect = this.getBoundingClientRect();
+        navTooltip.textContent = this.dataset.label;
+        navTooltip.style.top  = Math.round(rect.top + rect.height / 2 - 14) + 'px';
+        navTooltip.style.left = Math.round(rect.right + 10) + 'px';
+        navTooltip.style.display = 'block';
+      });
+      link.addEventListener('mouseleave', function() {
+        navTooltip.style.display = 'none';
+      });
+    });
+  </script>
+</body>
+</html>
