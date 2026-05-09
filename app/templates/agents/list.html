@@ -29,8 +29,8 @@
   {% endif %}
 </div>
 
-{# ── Agent tiles (hidden on All Conversations tab) ── #}
-{% if ai_agents and tab != 'all' %}
+{# ── Agent tiles (hidden on All Conversations and Favorites tabs) ── #}
+{% if ai_agents and tab not in ['all', 'favorites'] %}
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
   {% for agent in ai_agents %}
   <form method="post" action="{{ url_for('agents.new_conversation') }}" style="margin:0">
@@ -54,7 +54,7 @@
 </div>
 {% endif %}
 
-{# ── Filter panel (All Conversations only) ── #}
+{# ── Filter panel (All Conversations + Favorites) ── #}
 {% if tab == 'all' %}
 <form method="get" action="{{ url_for('agents.list_conversations') }}"
       id="all-filter-form" style="margin-bottom:24px">
@@ -129,6 +129,61 @@
         <button type="submit" class="btn btn-primary">Apply</button>
         {% if f_agent_ids or f_user_ids or f_date_from or f_date_to %}
         <a href="{{ url_for('agents.list_conversations', tab='all') }}"
+           class="btn btn-secondary">Clear</a>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</form>
+{% endif %}
+
+{# ── Filter panel — Favorites ── #}
+{% if tab == 'favorites' %}
+<form method="get" action="{{ url_for('agents.list_conversations') }}"
+      style="margin-bottom:24px">
+  <input type="hidden" name="tab" value="favorites">
+  <div class="card" style="padding:18px 22px">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
+
+      {# Agent dropdown #}
+      <div style="flex:1;min-width:180px;position:relative" class="ms-wrap" id="ms-fav-agent">
+        <label class="filter-label">Agent</label>
+        <button type="button" class="ms-trigger" onclick="toggleMsDrop('ms-fav-agent')">
+          <span class="ms-label" id="ms-fav-agent-label">
+            {% if f_agent_ids %}{{ f_agent_ids|length }} selected{% else %}All agents{% endif %}
+          </span>
+          <span class="ms-caret">▾</span>
+        </button>
+        <div class="ms-drop" id="ms-fav-agent-drop">
+          {% for agent in ai_agents %}
+          <label class="ms-option">
+            <input type="checkbox" name="agent_ids" value="{{ agent.id }}"
+                   {{ 'checked' if agent.id in f_agent_ids else '' }}
+                   onchange="updateMsLabel('ms-fav-agent', 'All agents')">
+            {{ agent.name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# Date range #}
+      <div style="flex:1;min-width:280px">
+        <label class="filter-label">Date Range</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" name="date_from" class="form-control"
+                 value="{{ f_date_from }}" style="flex:1">
+          <span style="color:var(--muted);font-size:13px">to</span>
+          <input type="date" name="date_to" class="form-control"
+                 value="{{ f_date_to }}" style="flex:1">
+        </div>
+      </div>
+
+      {# Apply / Clear #}
+      <div style="display:flex;gap:8px;padding-bottom:1px">
+        <button type="submit" class="btn btn-primary">Apply</button>
+        {% if f_agent_ids or f_date_from or f_date_to %}
+        <a href="{{ url_for('agents.list_conversations', tab='favorites') }}"
            class="btn btn-secondary">Clear</a>
         {% endif %}
       </div>

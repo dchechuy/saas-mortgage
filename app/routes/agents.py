@@ -156,32 +156,36 @@ def list_conversations():
 
     tab = request.args.get("tab", "mine")  # mine | all | favorites
 
-    # Filter params (only used for tab == "all")
     f_agent_ids = request.args.getlist("agent_ids", type=int)
     f_user_ids  = request.args.getlist("user_ids", type=int)
     f_date_from = request.args.get("date_from", "").strip()
     f_date_to   = request.args.get("date_to", "").strip()
 
+    from datetime import datetime as _dt
+
+    def _apply_date_filters(q):
+        if f_date_from:
+            q = q.filter(AgentConversation.updated_at >= f_date_from)
+        if f_date_to:
+            try:
+                end_dt = _dt.strptime(f_date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                q = q.filter(AgentConversation.updated_at <= end_dt)
+            except ValueError:
+                pass
+        return q
+
     conv_q = AgentConversation.query.filter_by(is_archived=False)
     if tab == "all":
-        # Optional filters
         if f_agent_ids:
             conv_q = conv_q.filter(AgentConversation.ai_agent_id.in_(f_agent_ids))
         if f_user_ids:
             conv_q = conv_q.filter(AgentConversation.user_id.in_(f_user_ids))
-        if f_date_from:
-            conv_q = conv_q.filter(AgentConversation.updated_at >= f_date_from)
-        if f_date_to:
-            # Include the entire end day
-            from datetime import datetime as _dt
-            try:
-                end_dt = _dt.strptime(f_date_to, "%Y-%m-%d").replace(
-                    hour=23, minute=59, second=59)
-                conv_q = conv_q.filter(AgentConversation.updated_at <= end_dt)
-            except ValueError:
-                pass
+        conv_q = _apply_date_filters(conv_q)
     elif tab == "favorites":
         conv_q = conv_q.filter_by(user_id=current_user.id, is_favorite=True)
+        if f_agent_ids:
+            conv_q = conv_q.filter(AgentConversation.ai_agent_id.in_(f_agent_ids))
+        conv_q = _apply_date_filters(conv_q)
     else:  # mine (default)
         conv_q = conv_q.filter_by(user_id=current_user.id)
     conversations = conv_q.order_by(AgentConversation.updated_at.desc()).all()
@@ -204,8 +208,8 @@ def list_conversations():
         f_date_to=f_date_to,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
-            {"label": "AI Agents", "url": url_for("agents.list_conversations")},
-            {"label": "Conversations", "url": None},
+            {"label": "Conversations", "url": url_for("agents.list_conversations")},
+            {"label": "Favorites" if tab == "favorites" else "All Conversations" if tab == "all" else "My Conversations", "url": None},
         ],
     )
 
@@ -276,7 +280,6 @@ def view_conversation(conversation_id):
         messages_data=messages_data,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
-            {"label": "AI Agents", "url": url_for("agents.list_conversations")},
             {"label": "Conversations", "url": url_for("agents.list_conversations")},
             {"label": conv.title or conv.agent.name, "url": None},
         ],
@@ -445,8 +448,8 @@ def learning_center():
         active_tab=active_tab,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
-            {"label": "AI Agents", "url": url_for("agents.list_conversations")},
-            {"label": "Learning Center", "url": None},
+            {"label": "Learning Center", "url": url_for("agents.learning_center")},
+            {"label": next((c["name"] for c in collections if str(c["id"]) == active_tab), "All Documents"), "url": None},
         ],
     )
 
@@ -476,7 +479,6 @@ def learning_center_doc(doc_id):
         error=error,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
-            {"label": "AI Agents", "url": url_for("agents.list_conversations")},
             {"label": "Learning Center", "url": url_for("agents.learning_center")},
             {"label": title, "url": None},
         ],
