@@ -62,12 +62,12 @@
              title="{{ att.filename }}"
              download="{{ att.filename }}">
             {% if att.category == 'image' %}
-              <span class="chip-icon"><i class="ti ti-photo"></i></span>
+              <span class="chip-icon"><i class="fa-solid fa-image"></i></span>
             {% else %}
-              <span class="chip-icon"><i class="ti ti-file-text"></i></span>
+              <span class="chip-icon"><i class="fa-solid fa-file-lines"></i></span>
             {% endif %}
             <span class="chip-name">{{ (att.filename or '') | truncate(28, True, '…') }}</span>
-            <span style="font-size:11px;opacity:0.5;flex-shrink:0;"><i class="ti ti-download"></i></span>
+            <span style="font-size:11px;opacity:0.5;flex-shrink:0;"><i class="fa-solid fa-download"></i></span>
           </a>
           {% endfor %}
         </div>
@@ -165,7 +165,7 @@
               oninput="autoGrow(this)"></textarea>
     <button type="button" id="attach-btn" title="Attach a file"
             style="background:none;border:none;cursor:pointer;padding:6px 8px;color:var(--muted);">
-      <i class="ti ti-paperclip" style="font-size:18px;"></i>
+      <i class="fa-solid fa-paperclip" style="font-size:16px;"></i>
     </button>
     <input type="file" id="attach-file-input" multiple
            accept="image/*,.pdf,.docx,.txt,.csv,.md"
@@ -251,16 +251,16 @@ function docPageUrl(docId, pageNumber) {
 function buildAttachmentChipsHtml(attachments) {
   if (!attachments || !attachments.length) return '';
   const chips = attachments.map(att => {
-    const icon = att.file_category === 'image' ? 'ti-photo' : 'ti-file-text';
+    const iconCls = att.file_category === 'image' ? 'fa-image' : 'fa-file-lines';
     const name = truncate(att.original_filename || '', 28);
     const downloadUrl = `/agents/attachments/${att.attachment_id}/download`;
     return `<a href="${escHtml(downloadUrl)}"
                class="attach-chip attach-chip-history"
                title="${escHtml(att.original_filename || '')}"
                download="${escHtml(att.original_filename || '')}">
-              <span class="chip-icon"><i class="ti ${icon}"></i></span>
+              <span class="chip-icon"><i class="fa-solid ${iconCls}"></i></span>
               <span class="chip-name">${escHtml(name)}</span>
-              <span style="font-size:11px;opacity:0.5;flex-shrink:0;"><i class="ti ti-download"></i></span>
+              <span style="font-size:11px;opacity:0.5;flex-shrink:0;"><i class="fa-solid fa-download"></i></span>
             </a>`;
   }).join('');
   return `<div class="message-attachments-history" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${chips}</div>`;
@@ -362,7 +362,7 @@ function handleFileSelected(file) {
   chip.className = 'attach-chip';
   chip.id = chipId;
   chip.innerHTML = `
-    <span class="chip-icon"><i class="ti ti-loader-2" style="animation:spin 1s linear infinite;"></i></span>
+    <span class="chip-icon"><i class="fa-solid fa-spinner" style="animation:spin 1s linear infinite;"></i></span>
     <span class="chip-name">${truncate(file.name, 24)}</span>
   `;
   document.getElementById('attachment-chips').appendChild(chip);
@@ -402,7 +402,7 @@ function handleFileSelected(file) {
             `;
           } else {
             finalChip.innerHTML = `
-              <span class="chip-icon"><i class="ti ti-file-text"></i></span>
+              <span class="chip-icon"><i class="fa-solid fa-file-lines"></i></span>
               <span class="chip-name">${truncate(data.original_filename, 20)}</span>
               <span class="chip-remove" data-id="${data.attachment_id}" title="Remove">×</span>
             `;
@@ -447,7 +447,7 @@ function showErrorChip(filename, message, existingChipId) {
   }
   chip.className = 'attach-chip upload-error';
   chip.innerHTML = `
-    <span class="chip-icon"><i class="ti ti-alert-circle"></i></span>
+    <span class="chip-icon"><i class="fa-solid fa-circle-exclamation"></i></span>
     <span class="chip-name" title="${message}">${truncate(filename, 16)}: ${truncate(message, 20)}</span>
     <span class="chip-remove" title="Dismiss">×</span>
   `;
