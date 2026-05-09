@@ -197,26 +197,10 @@ a:hover {
 .sidebar.collapsed .sidebar-brand { padding: 16px 0 14px; justify-content: center; gap: 0; }
 .sidebar.collapsed .brand-mark { width: 45px; height: 45px; border-radius: 14px; }
 .sidebar.collapsed .nav-section-label {
-  height: auto;
-  background: none;
-  margin: 8px 0 2px;
-  padding: 0;
-  overflow: visible;
-  color: var(--sidebar-muted);
+  padding: 14px 16px 8px;
+  overflow: hidden;
+  white-space: nowrap;
   pointer-events: none;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-align: center;
-  /* show short_name via data attribute when collapsed */
-  font-size: 0;  /* hide full text */
-}
-.sidebar.collapsed .nav-section-label::before {
-  content: attr(data-short);
-  font-size: 9px;
-  display: block;
-  opacity: 0.6;
 }
 .sidebar.collapsed .nav-subsection-label {
   height: 1px;
