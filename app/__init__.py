@@ -203,17 +203,20 @@ def _seed_defaults() -> None:
             db.session.add(FeatureFlag(key=key, label=label, description=desc, is_enabled=True))
 
     # ── Default nav sections ─────────────────────────────────────────────────
-    if NavSection.query.count() == 0:
-        default_sections = [
-            ("AI Agents",      "AI",    1, ["conversations", "learning_center"]),
-            ("Administration", "Admin", 2, ["user_management", "system_config", "reporting"]),
-            ("Documentation",  "Docs",  3, ["user_guides", "system_overview"]),
-        ]
-        for name, short_name, seq, slugs in default_sections:
-            section = NavSection(name=name, short_name=short_name, sequence=seq)
-            db.session.add(section)
-            db.session.flush()
-            for i, slug in enumerate(slugs, start=1):
-                db.session.add(NavItem(section_id=section.id, page_slug=slug, sequence=i, is_visible=True))
+    # Check per-section (not just count==0) so multiple gunicorn workers
+    # running concurrently don't each insert a full duplicate set.
+    default_sections = [
+        ("AI Agents",      "AI",    1, ["conversations", "learning_center"]),
+        ("Administration", "Admin", 2, ["user_management", "system_config", "reporting"]),
+        ("Documentation",  "Docs",  3, ["user_guides", "system_overview"]),
+    ]
+    for name, short_name, seq, slugs in default_sections:
+        if NavSection.query.filter_by(name=name).first():
+            continue
+        section = NavSection(name=name, short_name=short_name, sequence=seq)
+        db.session.add(section)
+        db.session.flush()
+        for i, slug in enumerate(slugs, start=1):
+            db.session.add(NavItem(section_id=section.id, page_slug=slug, sequence=i, is_visible=True))
 
     db.session.commit()
