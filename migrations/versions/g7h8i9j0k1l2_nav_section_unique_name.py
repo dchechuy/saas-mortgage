@@ -25,9 +25,11 @@ def upgrade():
         )
     """))
 
-    # 2. Add unique constraint
-    op.create_unique_constraint('uq_nav_section_name', 'nav_section', ['name'])
+    # 2. Add unique constraint via batch mode (required for SQLite)
+    with op.batch_alter_table('nav_section') as batch_op:
+        batch_op.create_unique_constraint('uq_nav_section_name', ['name'])
 
 
 def downgrade():
-    op.drop_constraint('uq_nav_section_name', 'nav_section', type_='unique')
+    with op.batch_alter_table('nav_section') as batch_op:
+        batch_op.drop_constraint('uq_nav_section_name', type_='unique')

@@ -25,10 +25,10 @@ def upgrade():
         )
     """))
 
-    op.create_unique_constraint(
-        'uq_nav_item_section_slug', 'nav_item', ['section_id', 'page_slug']
-    )
+    with op.batch_alter_table('nav_item') as batch_op:
+        batch_op.create_unique_constraint('uq_nav_item_section_slug', ['section_id', 'page_slug'])
 
 
 def downgrade():
-    op.drop_constraint('uq_nav_item_section_slug', 'nav_item', type_='unique')
+    with op.batch_alter_table('nav_item') as batch_op:
+        batch_op.drop_constraint('uq_nav_item_section_slug', type_='unique')
