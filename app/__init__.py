@@ -6,7 +6,7 @@ from flask_login import current_user
 
 from .access import user_has_access
 from .extensions import db, login_manager, migrate
-from .page_registry import PAGES
+from .page_registry import NAV_ITEMS, PAGES
 
 
 def create_app() -> Flask:
@@ -24,6 +24,7 @@ def create_app() -> Flask:
     from .models import (AiAgent, AgentConversation, AgentMessage,  # noqa: F401
                           Attribute, FeatureFlag, Integration, LlmModel,
                           LlmRequestLog, UserActivityLog, ApiRequestLog,
+                          NavItem, NavSection,
                           Permission, ReleaseNote, Role, User)
 
     @login_manager.user_loader
@@ -62,14 +63,54 @@ def create_app() -> Flask:
         Defaults all known flags to True when the table doesn't exist yet,
         so a pending migration never hides UI from users."""
         _KNOWN_FLAGS = ["conversations", "learning_center", "ai_agents_section", "system_overview"]
-        # Start with all flags ON — overwrite from DB once table exists
         flags = {f"flag_{k}": True for k in _KNOWN_FLAGS}
         try:
             for f in FeatureFlag.query.all():
                 flags[f"flag_{f.key}"] = f.is_enabled
         except Exception:
-            pass  # DB not ready yet — keep the True defaults
+            pass
         return flags
+
+    @app.context_processor
+    def inject_nav():
+        """Build the sidebar nav structure from NavSection / NavItem DB records.
+        Falls back gracefully if the tables don't exist yet."""
+        nav = []
+        try:
+            flag_cache: dict = {}
+            try:
+                for f in FeatureFlag.query.all():
+                    flag_cache[f.key] = f.is_enabled
+            except Exception:
+                pass
+
+            for section in NavSection.query.order_by(NavSection.sequence).all():
+                visible = []
+                for ni in section.visible_items:
+                    reg = NAV_ITEMS.get(ni.page_slug)
+                    if not reg:
+                        continue
+                    ff = reg.get("feature_flag")
+                    if ff and not flag_cache.get(ff, True):
+                        continue
+                    if not user_has_access(reg["permission_slug"], "view"):
+                        continue
+                    visible.append({
+                        "slug":             ni.page_slug,
+                        "label":            reg["label"],
+                        "icon":             reg["icon"],
+                        "endpoint":         reg["endpoint"],
+                        "active_endpoints": reg["active_endpoints"],
+                    })
+                if visible:
+                    nav.append({
+                        "name":       section.name,
+                        "short_name": section.short_name or "",
+                        "items":      visible,
+                    })
+        except Exception:
+            pass
+        return {"nav_sections": nav, "nav_registry": NAV_ITEMS}
 
     with app.app_context():
         _seed_defaults()
@@ -80,23 +121,22 @@ def create_app() -> Flask:
 def _seed_defaults() -> None:
     from sqlalchemy import inspect as sa_inspect
 
-    from .models import Attribute, FeatureFlag, Integration, Permission, Role, User
+    from .models import Attribute, FeatureFlag, Integration, NavItem, NavSection, Permission, Role, User
 
-    # Guard: skip seeding if schema hasn't been created or migrated yet.
-    # This prevents errors when the DB is stale (missing columns) or doesn't exist.
-    # After `flask db upgrade`, the schema is up to date and seeding runs on next startup.
     inspector = sa_inspect(db.engine)
     if not inspector.has_table("user"):
         return
     existing_cols = {c["name"] for c in inspector.get_columns("user")}
     if "updated_at" not in existing_cols:
-        return  # Schema is out of date — run `flask db upgrade` first
+        return
     if inspector.has_table("integration"):
         integration_cols = {c["name"] for c in inspector.get_columns("integration")}
         if "use_case" not in integration_cols:
-            return  # Schema is out of date — run `flask db upgrade` first
+            return
     if not inspector.has_table("feature_flag"):
-        return  # Schema is out of date — run `flask db upgrade` first
+        return
+    if not inspector.has_table("nav_section"):
+        return
 
     admin_role = Role.query.filter_by(name="admin").first()
     if not admin_role:
@@ -161,5 +201,19 @@ def _seed_defaults() -> None:
     for key, label, desc in default_flags:
         if not FeatureFlag.query.filter_by(key=key).first():
             db.session.add(FeatureFlag(key=key, label=label, description=desc, is_enabled=True))
+
+    # ── Default nav sections ─────────────────────────────────────────────────
+    if NavSection.query.count() == 0:
+        default_sections = [
+            ("AI Agents",      "AI",    1, ["conversations", "learning_center"]),
+            ("Administration", "Admin", 2, ["user_management", "system_config", "reporting"]),
+            ("Documentation",  "Docs",  3, ["user_guides", "system_overview"]),
+        ]
+        for name, short_name, seq, slugs in default_sections:
+            section = NavSection(name=name, short_name=short_name, sequence=seq)
+            db.session.add(section)
+            db.session.flush()
+            for i, slug in enumerate(slugs, start=1):
+                db.session.add(NavItem(section_id=section.id, page_slug=slug, sequence=i, is_visible=True))
 
     db.session.commit()

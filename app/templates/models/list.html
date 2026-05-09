@@ -5,7 +5,7 @@
 {% block content %}
 
 {# ── Top-level section tab strip ── #}
-{% set tab_count = (1 if can_view_agents else 0) + (1 if can_view_models else 0) + (1 if can_view_integrations else 0) + (1 if can_view_attributes else 0) + (1 if can_view_flags else 0) %}
+{% set tab_count = (1 if can_view_agents else 0) + (1 if can_view_models else 0) + (1 if can_view_integrations else 0) + (1 if can_view_attributes else 0) + (1 if can_view_flags else 0) + 1 %}
 {% if tab_count > 1 %}
 <div class="tax-tabs" style="margin-bottom:24px">
   {% if can_view_agents %}
@@ -28,6 +28,8 @@
   <button class="tax-tab" id="top-tab-btn-flags" type="button"
           onclick="switchTopTab('flags')">Feature Flags</button>
   {% endif %}
+  <button class="tax-tab" id="top-tab-btn-sections" type="button"
+          onclick="switchTopTab('sections')">Sections</button>
 </div>
 {% endif %}
 
@@ -902,10 +904,296 @@
 </div>
 {% endif %}
 
+{# ════════════════════════════════════════════════════════════════════
+   Sections tab — manage left sidebar navigation
+════════════════════════════════════════════════════════════════════ #}
+<div id="config-tab-sections" style="display:none">
+  <div class="sb-page-header" style="margin-bottom:20px">
+    <h1 class="page-title">Sections</h1>
+    <button type="button" class="btn btn-primary" onclick="secAddSection()">+ Add Section</button>
+  </div>
+
+  <div id="sec-list">
+    {# rendered by JS from secState #}
+  </div>
+
+  {# Unassigned pages pool (hidden source for add-page dropdowns) #}
+  <div id="sec-unassigned-pool" style="display:none"
+       data-pages="{{ unassigned_pages | tojson | e }}"></div>
+
+  <div style="margin-top:20px;display:flex;gap:10px">
+    <button type="button" class="btn btn-primary" onclick="secSaveAll()">Save Changes</button>
+    <button type="button" class="btn btn-secondary" onclick="secLoadFromServer()">Discard</button>
+  </div>
+  <div id="sec-status" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+</div>
+
+<style>
+.sec-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.sec-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.sec-order-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sec-order-btn {
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 24px;
+  height: 20px;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  line-height: 1;
+}
+.sec-order-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sec-order-btn:disabled { opacity: 0.3; cursor: default; }
+.sec-name-input {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.sec-short-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sec-short-input {
+  width: 60px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text);
+  text-align: center;
+  text-transform: uppercase;
+}
+.sec-del-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.sec-del-btn:hover { color: var(--danger-text); background: var(--danger-bg); }
+.sec-items-table { width: 100%; }
+.sec-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sec-item-row:last-child { border-bottom: none; }
+.sec-item-vis { flex-shrink: 0; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.sec-item-label { flex: 1; font-size: 14px; color: var(--text); }
+.sec-item-slug { font-size: 11px; color: var(--muted); font-family: monospace; }
+.sec-add-page-row {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sec-add-page-row select {
+  font-size: 13px;
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+</style>
+
 <script>
-const _TOP_SECTIONS   = ['agents', 'llm', 'apis', 'attributes', 'flags'];
-const _TOP_HASH_MAP   = { agents: '#agents', llm: '#integrations', apis: '#apis', attributes: '#attributes', flags: '#flags' };
-const _TOP_LABEL_MAP  = { agents: 'AI Agents Config', llm: 'LLM Models', apis: 'External APIs', attributes: 'Attributes', flags: 'Feature Flags' };
+/* ── Sections tab state & rendering ────────────────────────────── */
+let secState = {{ sections | tojson }};
+const secAllPages = {{ (sections | sum(attribute='items', start=[]) + unassigned_pages) | tojson }};
+
+// Build a master lookup: slug → label
+const secPageLabels = {};
+{{ sections | tojson }}.forEach(s => s.items.forEach(i => { secPageLabels[i.slug] = i.label; }));
+{{ unassigned_pages | tojson }}.forEach(p => { secPageLabels[p.slug] = p.label; });
+
+function secRender() {
+  const list = document.getElementById('sec-list');
+  if (!secState.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:16px 0">No sections yet. Click + Add Section to create one.</div>';
+    return;
+  }
+
+  // Build set of slugs already in use
+  const usedSlugs = new Set();
+  secState.forEach(s => s.items.forEach(i => usedSlugs.add(i.slug)));
+
+  list.innerHTML = secState.map((sec, si) => `
+    <div class="sec-card" data-si="${si}">
+      <div class="sec-card-header">
+        <div class="sec-order-btns">
+          <button class="sec-order-btn" onclick="secMoveSection(${si},-1)" ${si===0?'disabled':''} title="Move up">▲</button>
+          <button class="sec-order-btn" onclick="secMoveSection(${si},1)" ${si===secState.length-1?'disabled':''} title="Move down">▼</button>
+        </div>
+        <input class="sec-name-input" type="text" value="${secEsc(sec.name)}"
+               oninput="secState[${si}].name=this.value" placeholder="Section name"
+               style="flex:1">
+        <div class="sec-short-wrap">
+          <span>Short:</span>
+          <input class="sec-short-input" type="text" maxlength="5"
+                 value="${secEsc(sec.short_name)}"
+                 oninput="secState[${si}].short_name=this.value.toUpperCase().slice(0,5);this.value=secState[${si}].short_name"
+                 placeholder="5 chr" title="Shown in collapsed sidebar (max 5 chars)">
+        </div>
+        <button class="sec-del-btn" onclick="secDeleteSection(${si})" title="Remove section">×</button>
+      </div>
+      <div class="sec-items-table">
+        ${sec.items.map((item, ii) => `
+          <div class="sec-item-row" data-ii="${ii}">
+            <div class="sec-order-btns">
+              <button class="sec-order-btn" onclick="secMoveItem(${si},${ii},-1)" ${ii===0?'disabled':''}>▲</button>
+              <button class="sec-order-btn" onclick="secMoveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''}>▼</button>
+            </div>
+            <input type="checkbox" class="sec-item-vis" ${item.is_visible?'checked':''}
+                   onchange="secState[${si}].items[${ii}].is_visible=this.checked"
+                   title="Visible in nav">
+            <span class="sec-item-label">${secEsc(secPageLabels[item.slug] || item.slug)}</span>
+            <span class="sec-item-slug">${secEsc(item.slug)}</span>
+            <button class="sec-order-btn" style="width:auto;padding:0 6px"
+                    onclick="secRemoveItem(${si},${ii})" title="Remove from section">×</button>
+          </div>`).join('')}
+        <div class="sec-add-page-row">
+          ${secAvailableOptions(si, usedSlugs)}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function secAvailableOptions(si, usedSlugs) {
+  const available = Object.entries(secPageLabels).filter(([slug]) => !usedSlugs.has(slug));
+  if (!available.length) return '<span style="font-size:12px;color:var(--muted)">All pages assigned</span>';
+  const opts = available.map(([slug, label]) =>
+    `<option value="${secEsc(slug)}">${secEsc(label)}</option>`).join('');
+  return `<select onchange="secAddItem(${si},this.value);this.value=''">
+    <option value="">+ Add page…</option>${opts}</select>`;
+}
+
+function secEsc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function secMoveSection(si, dir) {
+  const j = si + dir;
+  if (j < 0 || j >= secState.length) return;
+  [secState[si], secState[j]] = [secState[j], secState[si]];
+  secRender();
+}
+
+function secDeleteSection(si) {
+  if (!confirm(`Remove section "${secState[si].name}"? Its pages will become unassigned.`)) return;
+  secState.splice(si, 1);
+  secRender();
+}
+
+function secMoveItem(si, ii, dir) {
+  const items = secState[si].items;
+  const j = ii + dir;
+  if (j < 0 || j >= items.length) return;
+  [items[ii], items[j]] = [items[j], items[ii]];
+  secRender();
+}
+
+function secRemoveItem(si, ii) {
+  secState[si].items.splice(ii, 1);
+  secRender();
+}
+
+function secAddItem(si, slug) {
+  if (!slug) return;
+  secState[si].items.push({ slug, label: secPageLabels[slug] || slug, is_visible: true });
+  secRender();
+}
+
+function secAddSection() {
+  secState.push({ id: null, name: 'New Section', short_name: '', items: [] });
+  secRender();
+  // Focus the new section's name input
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.sec-name-input');
+    if (inputs.length) inputs[inputs.length-1].focus();
+  }, 50);
+}
+
+function secLoadFromServer() {
+  secState = {{ sections | tojson }};
+  secRender();
+  document.getElementById('sec-status').textContent = '';
+}
+
+async function secSaveAll() {
+  const payload = secState.map(s => ({
+    name:       s.name,
+    short_name: s.short_name,
+    items:      s.items.map(i => ({ slug: i.slug, is_visible: i.is_visible })),
+  }));
+  const btn = document.querySelector('#config-tab-sections .btn-primary');
+  const status = document.getElementById('sec-status');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  status.textContent = '';
+  try {
+    const res = await fetch('{{ url_for("models.save_sections") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      status.style.color = 'var(--success-text, green)';
+      status.textContent = '✓ Saved. Reload the page to see the updated navigation.';
+    } else {
+      status.style.color = 'var(--danger-text)';
+      status.textContent = 'Error: ' + (data.error || 'Unknown error');
+    }
+  } catch(e) {
+    status.style.color = 'var(--danger-text)';
+    status.textContent = 'Network error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Save Changes';
+}
+</script>
+
+<script>
+const _TOP_SECTIONS   = ['agents', 'llm', 'apis', 'attributes', 'flags', 'sections'];
+const _TOP_HASH_MAP   = { agents: '#agents', llm: '#integrations', apis: '#apis', attributes: '#attributes', flags: '#flags', sections: '#sections' };
+const _TOP_LABEL_MAP  = { agents: 'AI Agents Config', llm: 'LLM Models', apis: 'External APIs', attributes: 'Attributes', flags: 'Feature Flags', sections: 'Sections' };
 
 function switchTopTab(section) {
   _TOP_SECTIONS.forEach(s => {
@@ -917,13 +1205,14 @@ function switchTopTab(section) {
   history.replaceState(null, '', _TOP_HASH_MAP[section] || '');
   const crumb = document.querySelector('.breadcrumb-nav .breadcrumb-current');
   if (crumb) crumb.textContent = _TOP_LABEL_MAP[section] || section;
+  if (section === 'sections') secRender();
 }
 
 function applyHash() {
   const hash = window.location.hash;
 
   // Map hash → section id
-  const hashToSection = { '#agents': 'agents', '#integrations': 'llm', '#apis': 'apis', '#attributes': 'attributes', '#flags': 'flags' };
+  const hashToSection = { '#agents': 'agents', '#integrations': 'llm', '#apis': 'apis', '#attributes': 'attributes', '#flags': 'flags', '#sections': 'sections' };
   let activeSection = hashToSection[hash];
 
   // Default to first rendered tab when no matching hash

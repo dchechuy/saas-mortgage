@@ -38,71 +38,17 @@
     </div>
 
     <div class="sidebar-nav">
-      {% if has_access('agents', 'view') and flag_ai_agents_section %}
-      <div class="nav-section-label">AI Agents</div>
-      {% if flag_conversations %}
-      <a href="{{ url_for('agents.list_conversations') }}"
-         class="{{ 'active' if request.endpoint in ['agents.list_conversations', 'agents.view_conversation', 'agents.new_conversation'] else '' }}"
-         data-label="Conversations">
-        <span class="nav-icon">{{ icon('message') }}</span>
-        <span class="nav-label">Conversations</span>
+      {% for section in nav_sections %}
+      <div class="nav-section-label" data-short="{{ section.short_name }}">{{ section.name }}</div>
+      {% for item in section.items %}
+      <a href="{{ url_for(item.endpoint) }}"
+         class="{{ 'active' if request.endpoint in item.active_endpoints else '' }}"
+         data-label="{{ item.label }}">
+        <span class="nav-icon">{{ icon(item.icon) }}</span>
+        <span class="nav-label">{{ item.label }}</span>
       </a>
-      {% endif %}
-      {% if flag_learning_center %}
-      <a href="{{ url_for('agents.learning_center') }}"
-         class="{{ 'active' if request.endpoint in ['agents.learning_center', 'agents.learning_center_doc'] else '' }}"
-         data-label="Learning Center">
-        <span class="nav-icon">{{ icon('book') }}</span>
-        <span class="nav-label">Learning Center</span>
-      </a>
-      {% endif %}
-      {% endif %}
-
-      {% if has_access('users', 'view') or has_access('permissions', 'view') or has_access('models', 'view') or has_access('attributes', 'view') or has_access('integrations', 'view') %}
-      <div class="nav-section-label">Administration</div>
-      {% if has_access('users', 'view') or has_access('permissions', 'view') %}
-      <a href="{{ url_for('users.list_users') }}"
-         class="{{ 'active' if request.endpoint in ['users.list_users', 'users.add_user', 'users.edit_user', 'users.change_password'] else '' }}"
-         data-label="User Management">
-        <span class="nav-icon">{{ icon('users') }}</span>
-        <span class="nav-label">User Management</span>
-      </a>
-      {% endif %}
-      {% if has_access('attributes', 'view') or has_access('agents', 'view') %}
-      <a href="{{ url_for('models.list_models') }}"
-         class="{{ 'active' if request.endpoint == 'models.list_models' else '' }}"
-         data-label="System Config">
-        <span class="nav-icon">{{ icon('tags') }}</span>
-        <span class="nav-label">System Config</span>
-      </a>
-      {% endif %}
-      {% if has_access('reporting', 'view') %}
-      <a href="{{ url_for('reporting.index') }}"
-         class="{{ 'active' if request.endpoint == 'reporting.index' else '' }}"
-         data-label="Reporting">
-        <span class="nav-icon">{{ icon('chart') }}</span>
-        <span class="nav-label">Reporting</span>
-      </a>
-      {% endif %}
-      {% endif %}
-
-      {% if has_access('help', 'view') %}
-      <div class="nav-section-label">Documentation</div>
-      <a href="{{ url_for('help.release_notes') }}"
-         class="{{ 'active' if request.endpoint in ['help.release_notes', 'help.quick_start', 'help.user_manual'] else '' }}"
-         data-label="User Guides">
-        <span class="nav-icon">{{ icon('book') }}</span>
-        <span class="nav-label">User Guides</span>
-      </a>
-      {% if flag_system_overview %}
-      <a href="{{ url_for('help.architecture') }}"
-         class="{{ 'active' if request.endpoint in ['help.architecture', 'help.dependencies'] else '' }}"
-         data-label="System Overview">
-        <span class="nav-icon">{{ icon('brain') }}</span>
-        <span class="nav-label">System Overview</span>
-      </a>
-      {% endif %}
-      {% endif %}
+      {% endfor %}
+      {% endfor %}
     </div>
   </nav>
 

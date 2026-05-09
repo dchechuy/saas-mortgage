@@ -8,7 +8,8 @@ from ..access import permission_required, user_has_access
 from ..activity_logger import log_activity
 from ..crypto import encrypt_value
 from ..extensions import db
-from ..models import AiAgent, Attribute, FeatureFlag, Integration, LlmModel
+from ..models import AiAgent, Attribute, FeatureFlag, Integration, LlmModel, NavItem, NavSection
+from ..page_registry import NAV_ITEMS
 
 _ALLOWED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
@@ -48,19 +49,49 @@ def list_models():
         Integration.category, Integration.provider, Integration.name
     ).all() if (can_view_integrations or can_view_agents) else []
 
+    # Build sections data for the Sections tab
+    db_sections = NavSection.query.order_by(NavSection.sequence).all()
+    sections_for_template = []
+    all_slugs_in_sections = set()
+    for sec in db_sections:
+        items = []
+        for ni in sec.all_items:
+            reg = NAV_ITEMS.get(ni.page_slug)
+            if reg:
+                items.append({
+                    "id":         ni.id,
+                    "slug":       ni.page_slug,
+                    "label":      reg["label"],
+                    "is_visible": ni.is_visible,
+                })
+                all_slugs_in_sections.add(ni.page_slug)
+        sections_for_template.append({
+            "id":         sec.id,
+            "name":       sec.name,
+            "short_name": sec.short_name or "",
+            "items":      items,
+        })
+    unassigned_pages = [
+        {"slug": slug, "label": meta["label"]}
+        for slug, meta in NAV_ITEMS.items()
+        if slug not in all_slugs_in_sections
+    ]
+
     return render_template(
         "models/list.html",
         llm_models=LlmModel.query.order_by(LlmModel.name).all() if can_view_models else [],
         attributes=Attribute.query.order_by(Attribute.category, Attribute.name).all() if can_view_attributes else [],
         integrations=all_integrations if can_view_integrations else [],
         ai_agents=AiAgent.query.order_by(AiAgent.name).all() if can_view_agents else [],
-        all_integrations=all_integrations,  # for agent add/edit modals
+        all_integrations=all_integrations,
         feature_flags=FeatureFlag.query.order_by(FeatureFlag.id).all() if can_view_flags else [],
         can_view_models=can_view_models,
         can_view_attributes=can_view_attributes,
         can_view_integrations=can_view_integrations,
         can_view_agents=can_view_agents,
         can_view_flags=can_view_flags,
+        sections=sections_for_template,
+        unassigned_pages=unassigned_pages,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "System Config", "url": url_for("models.list_models")},
@@ -352,3 +383,45 @@ def toggle_agent(agent_id):
     log_activity(current_user, f"agent.{state}", page="System Config")
     flash(f"Agent '{agent.name}' {state}.", "success")
     return _redirect_to_system_config("agents")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Nav Sections — save full layout (POST JSON)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@models_bp.route("/sections/save", methods=["POST"])
+@login_required
+@permission_required("attributes", "edit")
+def save_sections():
+    """Receive the full sections+items layout as JSON and rebuild the DB."""
+    import json as _json
+    data = request.get_json(force=True) or []
+
+    try:
+        # Delete all existing sections (cascade deletes items)
+        NavSection.query.delete()
+        db.session.flush()
+
+        for seq, sec in enumerate(data, start=1):
+            section = NavSection(
+                name=sec.get("name", "").strip() or "Section",
+                short_name=(sec.get("short_name") or "")[:5].strip() or None,
+                sequence=seq,
+            )
+            db.session.add(section)
+            db.session.flush()
+            for item_seq, item in enumerate(sec.get("items", []), start=1):
+                slug = item.get("slug", "").strip()
+                if slug and slug in NAV_ITEMS:
+                    db.session.add(NavItem(
+                        section_id=section.id,
+                        page_slug=slug,
+                        sequence=item_seq,
+                        is_visible=bool(item.get("is_visible", True)),
+                    ))
+
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 500

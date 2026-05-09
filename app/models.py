@@ -255,6 +255,40 @@ class AgentMessage(db.Model):
             return []
 
 
+class NavSection(db.Model):
+    """A labelled group in the left sidebar navigation."""
+    __tablename__ = "nav_section"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(80), nullable=False)
+    short_name = db.Column(db.String(5),  nullable=True)   # shown when sidebar is collapsed
+    sequence   = db.Column(db.Integer,    nullable=False, default=0)
+
+    items = db.relationship(
+        "NavItem", backref="section", lazy="dynamic",
+        order_by="NavItem.sequence", cascade="all, delete-orphan",
+    )
+
+    @property
+    def visible_items(self):
+        return self.items.filter_by(is_visible=True).order_by(NavItem.sequence).all()
+
+    @property
+    def all_items(self):
+        return self.items.order_by(NavItem.sequence).all()
+
+
+class NavItem(db.Model):
+    """A single link inside a NavSection."""
+    __tablename__ = "nav_item"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    section_id = db.Column(db.Integer, db.ForeignKey("nav_section.id"), nullable=False)
+    page_slug  = db.Column(db.String(80), nullable=False)
+    sequence   = db.Column(db.Integer,   nullable=False, default=0)
+    is_visible = db.Column(db.Boolean,   nullable=False, default=True)
+
+
 class FeatureFlag(db.Model):
     """Application feature flags — toggled via System Config."""
     __tablename__ = "feature_flag"
