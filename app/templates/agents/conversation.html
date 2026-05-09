@@ -371,6 +371,18 @@ function closeRagModal() {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRagModal(); });
+
+// Auto-send initial question passed via ?q= (from New Conversation modal)
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const q = params.get('q');
+  if (q) {
+    window.history.replaceState({}, '', window.location.pathname);
+    document.getElementById('chat-input').value = q;
+    autoGrow(document.getElementById('chat-input'));
+    sendMessage();
+  }
+})();
 </script>
 
 <style>

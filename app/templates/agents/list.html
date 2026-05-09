@@ -16,8 +16,13 @@
       {% if view_all %}Showing all team conversations.{% else %}Chat with your AI agents.{% endif %}
     </p>
   </div>
-  {# ── View All toggle ── #}
-  <div style="display:flex;align-items:center;gap:10px">
+  {# ── Actions ── #}
+  <div style="display:flex;align-items:center;gap:12px">
+    {% if ai_agents %}
+    <button type="button" class="btn btn-primary" onclick="openNewConvModal()">
+      + New Conversation
+    </button>
+    {% endif %}
     <span style="font-size:13px;color:var(--muted)">View All</span>
     <a href="{{ url_for('agents.list_conversations') }}{% if not view_all %}?view=all{% endif %}"
        style="display:inline-flex;align-items:center;text-decoration:none"
@@ -166,6 +171,139 @@
     <div style="font-size:14px;color:var(--muted)">An admin must configure at least one AI agent before conversations are available.</div>
   </div>
 </div>
+{% endif %}
+
+{# ── New Conversation Modal ── #}
+{% if ai_agents %}
+<div id="new-conv-modal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);
+            align-items:center;justify-content:center;z-index:1060;padding:24px"
+     onclick="if(event.target===this)closeNewConvModal()">
+
+  <div style="background:var(--panel);border-radius:14px;width:100%;max-width:780px;
+              box-shadow:0 12px 48px rgba(0,0,0,0.3);display:flex;flex-direction:column;
+              max-height:90vh" onclick="event.stopPropagation()">
+
+    {# Header #}
+    <div style="padding:24px 28px 18px;border-bottom:1px solid var(--border);
+                display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <h2 style="font-size:17px;font-weight:700;color:var(--text);margin:0">New Conversation</h2>
+      <button onclick="closeNewConvModal()"
+              style="background:none;border:none;color:var(--muted);font-size:20px;
+                     cursor:pointer;padding:0;line-height:1">&times;</button>
+    </div>
+
+    {# Scrollable body #}
+    <div style="padding:24px 28px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:24px">
+
+      {# Agent picker #}
+      <div>
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">
+          Choose an Agent
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          {% for agent in ai_agents %}
+          <div class="agent-tile new-conv-tile"
+               data-agent-id="{{ agent.id }}"
+               onclick="selectNewConvAgent(this)"
+               style="cursor:pointer">
+            {% if agent.avatar_filename %}
+            <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
+                 class="agent-tile-avatar">
+            {% else %}
+            <div class="agent-tile-initial">{{ agent.name[0].upper() }}</div>
+            {% endif %}
+            <div class="agent-tile-body">
+              <div class="agent-tile-name">{{ agent.name }}</div>
+              {% if agent.description %}
+              <div class="agent-tile-desc">{{ agent.description }}</div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# Initial question #}
+      <div>
+        <label style="font-size:12px;font-weight:700;text-transform:uppercase;
+                      letter-spacing:0.07em;color:var(--muted);display:block;margin-bottom:10px">
+          Your Question
+        </label>
+        <textarea id="new-conv-question"
+                  class="form-control"
+                  rows="5"
+                  placeholder="Type your question or prompt here…"
+                  style="resize:vertical;font-size:15px;line-height:1.6;padding:14px 16px"></textarea>
+      </div>
+    </div>
+
+    {# Footer #}
+    <div style="padding:16px 28px 22px;border-top:1px solid var(--border);
+                display:flex;justify-content:flex-end;gap:10px;flex-shrink:0">
+      <button type="button" class="btn btn-secondary" onclick="closeNewConvModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="new-conv-submit-btn" onclick="submitNewConv()">
+        Start Conversation →
+      </button>
+    </div>
+  </div>
+</div>
+
+{# Hidden form — submitted by JS #}
+<form id="new-conv-form" method="post" action="{{ url_for('agents.new_conversation') }}" style="display:none">
+  <input type="hidden" id="new-conv-agent-id" name="agent_id">
+  <input type="hidden" id="new-conv-initial-msg" name="initial_message">
+</form>
+
+<style>
+.agent-tile--selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+</style>
+
+<script>
+function openNewConvModal() {
+  document.getElementById('new-conv-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  // Auto-select if only one agent
+  var tiles = document.querySelectorAll('.new-conv-tile');
+  if (tiles.length === 1) selectNewConvAgent(tiles[0]);
+  setTimeout(function() { document.getElementById('new-conv-question').focus(); }, 60);
+}
+
+function closeNewConvModal() {
+  document.getElementById('new-conv-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function selectNewConvAgent(tile) {
+  document.querySelectorAll('.new-conv-tile').forEach(function(t) {
+    t.classList.remove('agent-tile--selected');
+  });
+  tile.classList.add('agent-tile--selected');
+  document.getElementById('new-conv-agent-id').value = tile.dataset.agentId;
+  document.getElementById('new-conv-question').focus();
+}
+
+function submitNewConv() {
+  var agentId  = document.getElementById('new-conv-agent-id').value;
+  var question = document.getElementById('new-conv-question').value.trim();
+  if (!agentId) {
+    alert('Please select an agent first.');
+    return;
+  }
+  document.getElementById('new-conv-initial-msg').value = question;
+  document.getElementById('new-conv-submit-btn').disabled = true;
+  document.getElementById('new-conv-submit-btn').textContent = 'Starting…';
+  document.getElementById('new-conv-form').submit();
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeNewConvModal();
+});
+</script>
 {% endif %}
 
 {% endblock %}

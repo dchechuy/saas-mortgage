@@ -147,16 +147,22 @@ def new_conversation():
     if not agent or not agent.is_active:
         abort(404)
 
+    initial_message = request.form.get("initial_message", "").strip()
+
     conv = AgentConversation(
         ai_agent_id=agent.id,
         user_id=current_user.id,
-        title=f"Conversation with {agent.name}",
+        title=initial_message[:80] if initial_message else f"Conversation with {agent.name}",
         skunkbox_session_id=str(uuid.uuid4()),
     )
     db.session.add(conv)
     db.session.commit()
     log_activity(current_user, "conversation.started", page="AI Agents")
-    return redirect(url_for("agents.view_conversation", conversation_id=conv.id))
+
+    kwargs = {"conversation_id": conv.id}
+    if initial_message:
+        kwargs["q"] = initial_message
+    return redirect(url_for("agents.view_conversation", **kwargs))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
