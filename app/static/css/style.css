@@ -1507,7 +1507,7 @@ textarea:focus,
 .agent-tile {
   position: relative;
   width: 268px;
-  height: 242px;
+  height: 303px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
