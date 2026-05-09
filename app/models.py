@@ -222,7 +222,8 @@ class AgentConversation(db.Model):
     ai_agent_id = db.Column(db.Integer, db.ForeignKey("ai_agent.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     skunkbox_session_id = db.Column(db.String(120), nullable=True)
-    is_archived = db.Column(db.Boolean, nullable=False, default=False)
+    is_archived  = db.Column(db.Boolean, nullable=False, default=False)
+    is_favorite  = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

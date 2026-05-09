@@ -110,10 +110,14 @@ def list_conversations():
         a.name.lower(),                        # then alpha
     ))
 
-    view_all = request.args.get("view") == "all"
+    tab = request.args.get("tab", "mine")  # mine | all | favorites
 
     conv_q = AgentConversation.query.filter_by(is_archived=False)
-    if not view_all:
+    if tab == "all":
+        pass  # show everyone's
+    elif tab == "favorites":
+        conv_q = conv_q.filter_by(user_id=current_user.id, is_favorite=True)
+    else:  # mine (default)
         conv_q = conv_q.filter_by(user_id=current_user.id)
     conversations = conv_q.order_by(AgentConversation.updated_at.desc()).all()
 
@@ -121,7 +125,7 @@ def list_conversations():
         "agents/list.html",
         ai_agents=ai_agents,
         conversations=conversations,
-        view_all=view_all,
+        tab=tab,
         breadcrumbs=[
             {"label": "Home", "url": url_for("main.dashboard")},
             {"label": "AI Agents", "url": url_for("agents.list_conversations")},
@@ -424,6 +428,18 @@ def _proxy_error(message: str):
     <p style="font-size:14px">⚠ Could not load preview: {message}</p>
     </body></html>"""
     return Response(html, status=502, content_type="text/html")
+
+
+@agents_bp.route("/<int:conversation_id>/favorite", methods=["POST"])
+@login_required
+@permission_required("agents", "view")
+def toggle_favorite(conversation_id):
+    conv = db.get_or_404(AgentConversation, conversation_id)
+    if conv.user_id != current_user.id:
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
+    conv.is_favorite = not conv.is_favorite
+    db.session.commit()
+    return jsonify({"ok": True, "is_favorite": conv.is_favorite})
 
 
 @agents_bp.route("/<int:conversation_id>/archive", methods=["POST"])
