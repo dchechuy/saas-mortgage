@@ -1545,7 +1545,7 @@ textarea:focus,
   left: 0;
   right: 0;
   padding: 8px 8px 9px;
-  background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.0) 100%);
+  background: rgba(0,0,0,0.68);
 }
 .agent-tile-name {
   font-size: 17px;
