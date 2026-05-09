@@ -202,29 +202,7 @@ def _seed_defaults() -> None:
         if not FeatureFlag.query.filter_by(key=key).first():
             db.session.add(FeatureFlag(key=key, label=label, description=desc, is_enabled=True))
 
-    # ── Default nav sections ─────────────────────────────────────────────────
-    # Use per-name check + savepoint so multiple gunicorn workers starting
-    # simultaneously can't each insert a full duplicate set. The unique
-    # constraint on nav_section.name is the final guard; the savepoint keeps
-    # the outer session alive if a racing worker triggers an IntegrityError.
-    from sqlalchemy.exc import IntegrityError
-    default_sections = [
-        ("AI Agents",      "AI",    1, ["conversations", "learning_center"]),
-        ("Administration", "Admin", 2, ["user_management", "system_config", "reporting"]),
-        ("Documentation",  "Docs",  3, ["user_guides", "system_overview"]),
-    ]
-    for name, short_name, seq, slugs in default_sections:
-        if NavSection.query.filter_by(name=name).first():
-            continue
-        try:
-            sp = db.session.begin_nested()   # savepoint
-            section = NavSection(name=name, short_name=short_name, sequence=seq)
-            db.session.add(section)
-            db.session.flush()
-            for i, slug in enumerate(slugs, start=1):
-                db.session.add(NavItem(section_id=section.id, page_slug=slug, sequence=i, is_visible=True))
-            sp.commit()
-        except IntegrityError:
-            sp.rollback()   # another worker won the race — that's fine
+    # Nav sections are seeded via migration h8i9j0k1l2m3, not at startup.
+    # Seeding here caused a race condition with multiple gunicorn workers.
 
     db.session.commit()
