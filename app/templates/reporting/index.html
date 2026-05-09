@@ -1,27 +1,26 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import stat_card, empty_state %}
 {% block title %}Reporting — saas-mortgage{% endblock %}
 {% block page_heading %}Reporting{% endblock %}
 
 {% block content %}
 
 {# ── Tab bar ─────────────────────────────────────────────────────── #}
-<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px">
+<div class="tax-tabs" style="margin-bottom:24px">
+  <a href="{{ url_for('reporting.index', tab='dashboard') }}"
+     class="tax-tab {{ 'active' if active_tab == 'dashboard' else '' }}">
+    Dashboard
+  </a>
   <a href="{{ url_for('reporting.index', tab='llm') }}"
-     style="padding:10px 20px;font-size:13px;font-weight:600;text-decoration:none;
-            border-bottom:2px solid transparent;margin-bottom:-2px;
-            {% if active_tab == 'llm' %}border-bottom-color:var(--accent);color:var(--accent){% else %}color:var(--muted){% endif %}">
+     class="tax-tab {{ 'active' if active_tab == 'llm' else '' }}">
     LLM Requests
   </a>
   <a href="{{ url_for('reporting.index', tab='activity') }}"
-     style="padding:10px 20px;font-size:13px;font-weight:600;text-decoration:none;
-            border-bottom:2px solid transparent;margin-bottom:-2px;
-            {% if active_tab == 'activity' %}border-bottom-color:var(--accent);color:var(--accent){% else %}color:var(--muted){% endif %}">
+     class="tax-tab {{ 'active' if active_tab == 'activity' else '' }}">
     User Activity
   </a>
   <a href="{{ url_for('reporting.index', tab='api') }}"
-     style="padding:10px 20px;font-size:13px;font-weight:600;text-decoration:none;
-            border-bottom:2px solid transparent;margin-bottom:-2px;
-            {% if active_tab == 'api' %}border-bottom-color:var(--accent);color:var(--accent){% else %}color:var(--muted){% endif %}">
+     class="tax-tab {{ 'active' if active_tab == 'api' else '' }}">
     External API Requests
   </a>
 </div>
@@ -31,9 +30,78 @@
   <h1 class="page-title">
     {% if active_tab == 'activity' %}User Activity
     {% elif active_tab == 'api' %}External API Requests
-    {% else %}LLM Requests{% endif %}
+    {% elif active_tab == 'llm' %}LLM Requests
+    {% else %}Dashboard{% endif %}
   </h1>
 </div>
+
+{# ════════════════════════════════════════════════════════════════════
+   TAB 0 — Dashboard
+════════════════════════════════════════════════════════════════════ #}
+{% if active_tab == 'dashboard' %}
+
+<div class="row row-deck row-cards">
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Users", dash_stats.users, "users", "teal", "Active workspace members") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Roles", dash_stats.roles, "shield", "gold", "Reusable permission models") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("LLM Models", dash_stats.models, "brain", "plum", "Configured model endpoints") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Integrations", dash_stats.integrations, "plug", "blue", "Third-party platform connections") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Attributes", dash_stats.attributes, "tags", "coral", "Reusable business classifications") }}
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    {{ stat_card("Release Notes", dash_stats.releases, "sparkles", "mint", "Version history and product comms") }}
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header">
+    <h3 class="card-title">Recent Release Notes</h3>
+  </div>
+  {% if recent_releases %}
+  <div class="ds-table-shell">
+    <div class="table-responsive">
+      <table class="table table-vcenter card-table">
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Type</th>
+            <th>Title</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for note in recent_releases %}
+          <tr>
+            <td class="text-nowrap">v{{ note.version_string }}</td>
+            <td><span class="badge text-bg-primary-lt">{{ note.release_type }}</span></td>
+            <td>{{ note.title }}</td>
+            <td class="text-secondary">
+              <span class="local-time" data-utc="{{ note.created_at.isoformat() }}">
+                {{ note.created_at.strftime('%Y-%m-%d') }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card-body">
+    {{ empty_state("No release notes yet", "Use the Help area to publish your first version update.", "sparkles") }}
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}{# /dashboard tab #}
 
 
 {# ════════════════════════════════════════════════════════════════════

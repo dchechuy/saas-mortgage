@@ -25,7 +25,7 @@ def dashboard():
         stats=stats,
         recent_releases=recent_releases,
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "Dashboard", "url": None},
         ],
     )

@@ -42,7 +42,7 @@ def list_models():
 
     if not any([can_view_models, can_view_attributes, can_view_integrations, can_view_agents]):
         flash("You do not have permission to access this page.", "error")
-        return redirect(url_for("main.dashboard"))
+        return redirect(url_for("agents.list_conversations"))
 
     all_integrations = Integration.query.order_by(
         Integration.category, Integration.provider, Integration.name
@@ -62,7 +62,7 @@ def list_models():
         can_view_agents=can_view_agents,
         can_view_flags=can_view_flags,
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "System Config", "url": url_for("models.list_models")},
             {"label": "LLM Models", "url": None},
         ],

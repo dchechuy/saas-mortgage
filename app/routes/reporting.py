@@ -7,7 +7,7 @@ from sqlalchemy import func
 
 from ..activity_logger import ACTION_LABELS
 from ..extensions import db
-from ..models import ApiRequestLog, Integration, LlmModel, LlmRequestLog, User, UserActivityLog
+from ..models import ApiRequestLog, Attribute, Integration, LlmModel, LlmRequestLog, ReleaseNote, Role, User, UserActivityLog
 
 reporting_bp = Blueprint("reporting", __name__, url_prefix="/reporting")
 
@@ -35,7 +35,7 @@ def _date_range():
 @login_required
 def index():
     _admin_required()
-    active_tab = request.args.get("tab", "llm")
+    active_tab = request.args.get("tab", "dashboard")
 
     # ── LLM Requests tab ────────────────────────────────────────────────────
     llm_date_from, llm_date_to = _date_range()
@@ -174,8 +174,18 @@ def index():
             "date_to":        api_date_to.isoformat(),
             "integration_id": api_integ_id,
         },
+        # Dashboard tab
+        dash_stats={
+            "users":        User.query.count(),
+            "roles":        Role.query.count(),
+            "models":       LlmModel.query.count(),
+            "integrations": Integration.query.count(),
+            "attributes":   Attribute.query.count(),
+            "releases":     ReleaseNote.query.count(),
+        },
+        recent_releases=ReleaseNote.query.order_by(ReleaseNote.created_at.desc()).limit(5).all(),
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "Reporting", "url": None},
         ],
     )

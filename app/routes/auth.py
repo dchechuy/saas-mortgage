@@ -12,13 +12,13 @@ auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.route("/")
 def index():
-    return redirect(url_for("main.dashboard"))
+    return redirect(url_for("agents.list_conversations"))
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("main.dashboard"))
+        return redirect(url_for("agents.list_conversations"))
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -37,7 +37,7 @@ def login():
             if user.must_change_password:
                 flash("Please change the default password before continuing.", "warning")
                 return redirect(url_for("users.change_password"))
-            return redirect(url_for("main.dashboard"))
+            return redirect(url_for("agents.list_conversations"))
 
     return render_template("auth/login.html")
 

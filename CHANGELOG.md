@@ -1,5 +1,38 @@
 # Changelog
 
+## [2026-05-08] - Navigation restructure + Conversations filter panel
+
+### Home page change
+- **Conversations (My Conversations) is now the default home page** — `/` and post-login redirect to `agents.list_conversations` instead of the old Dashboard
+- All breadcrumb "Home" links and fallback redirects across every route file updated accordingly
+
+### Dashboard moved to Reporting
+- Dashboard removed from the left sidebar navigation
+- Dashboard content (stat cards + Recent Release Notes) added as the **first tab** ("Dashboard") in the Reporting section (`/reporting/?tab=dashboard`)
+- Reporting now defaults to the Dashboard tab
+- `reporting.py` imports `Attribute`, `Role`, `ReleaseNote`; queries and passes `dash_stats` and `recent_releases` to the template
+- Reporting tab bar switched to `tax-tab` / `tax-tabs` CSS pattern for consistency
+
+### All Conversations filter panel
+- Agent tiles hidden on the "All Conversations" tab
+- Filter panel added (card with three controls): **Agent** multi-select, **User** multi-select (current user listed first as "My Conversations"), **Date Range** (from/to date pickers)
+- **Apply** button submits filters via GET; **Clear** button appears only when filters are active
+- Filter state is sticky (pre-selected after submit)
+- `list_conversations()` in `agents.py` reads `agent_ids`, `user_ids`, `date_from`, `date_to` params and applies them to the query when `tab == "all"`; passes `all_users` and current filter state to template
+- Date-to filter includes the full end day (23:59:59)
+- Improved empty states: tab-aware messaging for Favorites, filtered All Conversations, and no-agent state
+
+### Conversations — star / favorites
+- Added `is_favorite` boolean column to `AgentConversation` (migration `75c0ec3212cc`)
+- Star toggle button per conversation row; AJAX `POST /agents/<id>/favorite` flips the flag and returns JSON
+- Three-tab navigation: **My Conversations** / **All Conversations** / **⭐ Favorites**
+- Tab title shown as `<h1>` below the tab strip (matches User Management pattern)
+
+### New Conversation modal
+- "New Conversation" button in the top-right of the page header
+- Modal with agent tile picker + large question textarea
+- Agent auto-selected when only one exists; initial message passed as `?q=` param and auto-sent on conversation load
+
 ## [2026-05-07] - Learning Center
 
 ### Feature

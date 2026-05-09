@@ -9,7 +9,7 @@ from ..activity_logger import log_activity
 from ..crypto import decrypt_value
 from ..extensions import db
 from sqlalchemy import func
-from ..models import AgentConversation, AgentMessage, AiAgent, Integration
+from ..models import AgentConversation, AgentMessage, AiAgent, Integration, User
 
 agents_bp = Blueprint("agents", __name__, url_prefix="/agents")
 
@@ -112,22 +112,54 @@ def list_conversations():
 
     tab = request.args.get("tab", "mine")  # mine | all | favorites
 
+    # Filter params (only used for tab == "all")
+    f_agent_ids = request.args.getlist("agent_ids", type=int)
+    f_user_ids  = request.args.getlist("user_ids", type=int)
+    f_date_from = request.args.get("date_from", "").strip()
+    f_date_to   = request.args.get("date_to", "").strip()
+
     conv_q = AgentConversation.query.filter_by(is_archived=False)
     if tab == "all":
-        pass  # show everyone's
+        # Optional filters
+        if f_agent_ids:
+            conv_q = conv_q.filter(AgentConversation.ai_agent_id.in_(f_agent_ids))
+        if f_user_ids:
+            conv_q = conv_q.filter(AgentConversation.user_id.in_(f_user_ids))
+        if f_date_from:
+            conv_q = conv_q.filter(AgentConversation.updated_at >= f_date_from)
+        if f_date_to:
+            # Include the entire end day
+            from datetime import datetime as _dt
+            try:
+                end_dt = _dt.strptime(f_date_to, "%Y-%m-%d").replace(
+                    hour=23, minute=59, second=59)
+                conv_q = conv_q.filter(AgentConversation.updated_at <= end_dt)
+            except ValueError:
+                pass
     elif tab == "favorites":
         conv_q = conv_q.filter_by(user_id=current_user.id, is_favorite=True)
     else:  # mine (default)
         conv_q = conv_q.filter_by(user_id=current_user.id)
     conversations = conv_q.order_by(AgentConversation.updated_at.desc()).all()
 
+    all_users = (
+        User.query.filter_by(is_active=True)
+        .order_by(User.first_name, User.last_name, User.username)
+        .all()
+    )
+
     return render_template(
         "agents/list.html",
         ai_agents=ai_agents,
         conversations=conversations,
         tab=tab,
+        all_users=all_users,
+        f_agent_ids=f_agent_ids,
+        f_user_ids=f_user_ids,
+        f_date_from=f_date_from,
+        f_date_to=f_date_to,
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "AI Agents", "url": url_for("agents.list_conversations")},
             {"label": "Conversations", "url": None},
         ],
@@ -199,7 +231,7 @@ def view_conversation(conversation_id):
         messages=raw_messages,
         messages_data=messages_data,
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "AI Agents", "url": url_for("agents.list_conversations")},
             {"label": "Conversations", "url": url_for("agents.list_conversations")},
             {"label": conv.title or conv.agent.name, "url": None},
@@ -339,7 +371,7 @@ def learning_center():
         integration=integration,
         error=error,
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "AI Agents", "url": url_for("agents.list_conversations")},
             {"label": "Learning Center", "url": None},
         ],
@@ -370,7 +402,7 @@ def learning_center_doc(doc_id):
         integration=integration,
         error=error,
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "AI Agents", "url": url_for("agents.list_conversations")},
             {"label": "Learning Center", "url": url_for("agents.learning_center")},
             {"label": title, "url": None},

@@ -65,7 +65,7 @@ def _render_doc(name: str) -> str:
 
 def _user_guides_crumbs(tab: str) -> list:
     return [
-        {"label": "Home", "url": url_for("main.dashboard")},
+        {"label": "Home", "url": url_for("agents.list_conversations")},
         {"label": "User Guides", "url": url_for("help.release_notes")},
         {"label": PAGE_META[tab]["title"], "url": None},
     ]
@@ -73,7 +73,7 @@ def _user_guides_crumbs(tab: str) -> list:
 
 def _system_overview_crumbs(tab: str) -> list:
     return [
-        {"label": "Home", "url": url_for("main.dashboard")},
+        {"label": "Home", "url": url_for("agents.list_conversations")},
         {"label": "System Overview", "url": url_for("help.architecture")},
         {"label": PAGE_META[tab]["title"], "url": None},
     ]

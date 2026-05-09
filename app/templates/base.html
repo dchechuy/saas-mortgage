@@ -38,14 +38,6 @@
     </div>
 
     <div class="sidebar-nav">
-      <div class="nav-section-label">General</div>
-      <a href="{{ url_for('main.dashboard') }}"
-         class="{{ 'active' if request.endpoint == 'main.dashboard' else '' }}"
-         data-label="Dashboard">
-        <span class="nav-icon">{{ icon('dashboard') }}</span>
-        <span class="nav-label">Dashboard</span>
-      </a>
-
       {% if has_access('agents', 'view') and flag_ai_agents_section %}
       <div class="nav-section-label">AI Agents</div>
       {% if flag_conversations %}

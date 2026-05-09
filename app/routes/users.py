@@ -32,7 +32,7 @@ def list_users():
         user_counts=user_counts,
         pages=PAGES,
         breadcrumbs=[
-            {"label": "Home", "url": url_for("main.dashboard")},
+            {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "User Management", "url": None},
         ],
     )
@@ -135,7 +135,7 @@ def change_password():
             db.session.commit()
             log_activity(current_user, "user.password_changed", page="User Management")
             flash("Password updated.", "success")
-            return redirect(url_for("main.dashboard"))
+            return redirect(url_for("agents.list_conversations"))
 
     return render_template("users/change_password.html")
 
@@ -160,7 +160,7 @@ def toggle_user(user_id):
 @login_required
 def upload_avatar_self():
     _save_avatar(current_user)
-    return redirect(request.referrer or url_for("main.dashboard"))
+    return redirect(request.referrer or url_for("agents.list_conversations"))
 
 
 def _save_avatar(user: User) -> None:

@@ -29,8 +29,8 @@
   {% endif %}
 </div>
 
-{# ── Agent tiles ── #}
-{% if ai_agents %}
+{# ── Agent tiles (hidden on All Conversations tab) ── #}
+{% if ai_agents and tab != 'all' %}
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
   {% for agent in ai_agents %}
   <form method="post" action="{{ url_for('agents.new_conversation') }}" style="margin:0">
@@ -52,6 +52,72 @@
   </form>
   {% endfor %}
 </div>
+{% endif %}
+
+{# ── Filter panel (All Conversations only) ── #}
+{% if tab == 'all' %}
+<form method="get" action="{{ url_for('agents.list_conversations') }}"
+      style="margin-bottom:24px">
+  <input type="hidden" name="tab" value="all">
+  <div class="card" style="padding:18px 22px">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
+
+      {# Agent multi-select #}
+      <div style="flex:1;min-width:180px">
+        <label class="filter-label">Agent</label>
+        <select name="agent_ids" multiple class="form-select filter-multiselect">
+          {% for agent in ai_agents %}
+          <option value="{{ agent.id }}"
+                  {{ 'selected' if agent.id in f_agent_ids else '' }}>
+            {{ agent.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {# User multi-select #}
+      <div style="flex:1;min-width:180px">
+        <label class="filter-label">User</label>
+        <select name="user_ids" multiple class="form-select filter-multiselect">
+          <option value="{{ current_user.id }}"
+                  {{ 'selected' if current_user.id in f_user_ids else '' }}>
+            My Conversations
+          </option>
+          {% for u in all_users %}
+          {% if u.id != current_user.id %}
+          <option value="{{ u.id }}"
+                  {{ 'selected' if u.id in f_user_ids else '' }}>
+            {{ u.display_name or u.username }}
+          </option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      {# Date range #}
+      <div style="flex:1;min-width:280px">
+        <label class="filter-label">Date Range</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" name="date_from" class="form-control"
+                 value="{{ f_date_from }}" style="flex:1">
+          <span style="color:var(--muted);font-size:13px">to</span>
+          <input type="date" name="date_to" class="form-control"
+                 value="{{ f_date_to }}" style="flex:1">
+        </div>
+      </div>
+
+      {# Apply / Clear #}
+      <div style="display:flex;gap:8px;padding-bottom:1px">
+        <button type="submit" class="btn btn-primary">Apply</button>
+        {% if f_agent_ids or f_user_ids or f_date_from or f_date_to %}
+        <a href="{{ url_for('agents.list_conversations', tab='all') }}"
+           class="btn btn-secondary">Clear</a>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</form>
 {% endif %}
 
 {# ── Conversations list ── #}
@@ -171,6 +237,18 @@
     <div style="font-size:14px;color:var(--muted)">An admin must configure at least one AI agent before conversations are available.</div>
   </div>
 </div>
+{% else %}
+<div class="card">
+  <div class="card-body" style="padding:48px 24px;text-align:center">
+    <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px">No conversations found</div>
+    <div style="font-size:14px;color:var(--muted)">
+      {% if tab == 'favorites' %}You haven't starred any conversations yet.
+      {% elif tab == 'all' and (f_agent_ids or f_user_ids or f_date_from or f_date_to) %}No conversations match the selected filters.
+      {% else %}Start a conversation by selecting an agent above.
+      {% endif %}
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <style>
@@ -186,6 +264,21 @@
 }
 .star-btn:hover { color: #f59e0b; transform: scale(1.2); }
 .star-btn--on   { color: #f59e0b; }
+
+/* Filter panel */
+.filter-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.filter-multiselect {
+  min-height: 90px;
+  font-size: 13px;
+}
 </style>
 
 <script>

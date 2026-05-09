@@ -73,7 +73,7 @@ def save_role(role_id):
 @permission_required("permissions", "edit")
 def delete_role(role_id):
     if not current_user.is_admin():
-        return redirect(url_for("main.dashboard"))
+        return redirect(url_for("agents.list_conversations"))
 
     role = db.get_or_404(Role, role_id)
     if role.is_protected:
