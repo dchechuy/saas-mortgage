@@ -398,7 +398,8 @@ def save_sections():
     data = request.get_json(force=True) or []
 
     try:
-        # Delete all existing sections (cascade deletes items)
+        # Delete items first, then sections (bulk delete bypasses ORM cascade)
+        NavItem.query.delete()
         NavSection.query.delete()
         db.session.flush()
 
