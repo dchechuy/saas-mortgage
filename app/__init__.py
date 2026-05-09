@@ -106,7 +106,7 @@ def create_app() -> Flask:
                     nav.append({
                         "name":       section.name,
                         "short_name": section.short_name or "",
-                        "items":      visible,
+                        "pages":      visible,
                     })
         except Exception:
             pass

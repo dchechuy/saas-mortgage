@@ -40,7 +40,7 @@
     <div class="sidebar-nav">
       {% for section in nav_sections %}
       <div class="nav-section-label" data-short="{{ section.short_name }}">{{ section.name }}</div>
-      {% for item in section.items %}
+      {% for item in section.pages %}
       <a href="{{ url_for(item.endpoint) }}"
          class="{{ 'active' if request.endpoint in item.active_endpoints else '' }}"
          data-label="{{ item.label }}">
