@@ -255,6 +255,23 @@ class AgentMessage(db.Model):
             return []
 
 
+class MessageAttachment(db.Model):
+    """Local mirror of attachment metadata for chat history display.
+    The actual file lives on skunkBOX — we store only what we need to render chips."""
+    __tablename__ = "message_attachment"
+
+    id                     = db.Column(db.Integer, primary_key=True)
+    message_id             = db.Column(db.Integer, db.ForeignKey("agent_message.id"), nullable=False)
+    skunkbox_attachment_id = db.Column(db.Integer, nullable=False)
+    original_filename      = db.Column(db.String(255), nullable=False)
+    mime_type              = db.Column(db.String(100), nullable=False)
+    file_category          = db.Column(db.String(20), nullable=False)  # 'image' | 'document'
+    file_size_bytes        = db.Column(db.Integer, nullable=True)
+    created_at             = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    message = db.relationship("AgentMessage", backref=db.backref("attachments", lazy="dynamic"))
+
+
 class NavSection(db.Model):
     """A labelled group in the left sidebar navigation."""
     __tablename__ = "nav_section"

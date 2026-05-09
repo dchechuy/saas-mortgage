@@ -54,6 +54,24 @@
     {% if msg.role == 'user' %}
     <div class="chat-bubble-wrap chat-bubble-wrap--user">
       <div class="chat-bubble chat-bubble--user">
+        {% if msg.attachments %}
+        <div class="message-attachments-history" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
+          {% for att in msg.attachments %}
+          <a href="{{ url_for('agents.download_attachment', skunkbox_attachment_id=att.id) }}"
+             class="attach-chip attach-chip-history"
+             title="{{ att.filename }}"
+             download="{{ att.filename }}">
+            {% if att.category == 'image' %}
+              <span class="chip-icon"><i class="ti ti-photo"></i></span>
+            {% else %}
+              <span class="chip-icon"><i class="ti ti-file-text"></i></span>
+            {% endif %}
+            <span class="chip-name">{{ (att.filename or '') | truncate(28, True, '…') }}</span>
+            <span style="font-size:11px;opacity:0.5;flex-shrink:0;"><i class="ti ti-download"></i></span>
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
         <div class="chat-bubble-content">{{ msg.content }}</div>
         <div class="chat-bubble-time">
           <span class="local-time" data-utc="{{ msg.created_at }}" data-format="time">
@@ -78,6 +96,24 @@
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
         <div class="chat-bubble chat-bubble--agent">
+          {% if msg.attachments %}
+          <div class="message-attachments-history" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
+            {% for att in msg.attachments %}
+            <a href="{{ url_for('agents.download_attachment', skunkbox_attachment_id=att.id) }}"
+               class="attach-chip attach-chip-history"
+               title="{{ att.filename }}"
+               download="{{ att.filename }}">
+              {% if att.category == 'image' %}
+                <span class="chip-icon"><i class="ti ti-photo"></i></span>
+              {% else %}
+                <span class="chip-icon"><i class="ti ti-file-text"></i></span>
+              {% endif %}
+              <span class="chip-name">{{ (att.filename or '') | truncate(28, True, '…') }}</span>
+              <span style="font-size:11px;opacity:0.5;flex-shrink:0;"><i class="ti ti-download"></i></span>
+            </a>
+            {% endfor %}
+          </div>
+          {% endif %}
           <div class="chat-bubble-content chat-markdown" data-raw="{{ msg.content | e }}"></div>
           <div class="chat-bubble-time">
             <span class="local-time" data-utc="{{ msg.created_at }}" data-format="time">
@@ -116,6 +152,9 @@
     </div>
   </div>
 
+  {# Attachment chips area — shown only when files are staged #}
+  <div id="attachment-chips" style="display:none;flex-wrap:wrap;gap:8px;padding:8px 16px 4px;"></div>
+
   {# Input bar #}
   <div style="border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:flex-end;flex-shrink:0">
     <textarea id="chat-input" class="form-control"
@@ -124,6 +163,13 @@
               style="resize:none;overflow:hidden;max-height:140px;line-height:1.5;padding:10px 14px"
               onkeydown="handleChatKey(event)"
               oninput="autoGrow(this)"></textarea>
+    <button type="button" id="attach-btn" title="Attach a file"
+            style="background:none;border:none;cursor:pointer;padding:6px 8px;color:var(--muted);">
+      <i class="ti ti-paperclip" style="font-size:18px;"></i>
+    </button>
+    <input type="file" id="attach-file-input" multiple
+           accept="image/*,.pdf,.docx,.txt,.csv,.md"
+           style="display:none;">
     <button id="chat-send-btn" class="btn btn-primary"
             style="flex-shrink:0;padding:10px 18px;align-self:flex-end"
             onclick="sendMessage()">
@@ -201,12 +247,33 @@ function docPageUrl(docId, pageNumber) {
   return pageNumber > 0 ? base + '?rag_page=' + pageNumber : base;
 }
 
+/* ── Attachment chips HTML builder (for dynamic bubbles) ── */
+function buildAttachmentChipsHtml(attachments) {
+  if (!attachments || !attachments.length) return '';
+  const chips = attachments.map(att => {
+    const icon = att.file_category === 'image' ? 'ti-photo' : 'ti-file-text';
+    const name = truncate(att.original_filename || '', 28);
+    const downloadUrl = `/agents/attachments/${att.attachment_id}/download`;
+    return `<a href="${escHtml(downloadUrl)}"
+               class="attach-chip attach-chip-history"
+               title="${escHtml(att.original_filename || '')}"
+               download="${escHtml(att.original_filename || '')}">
+              <span class="chip-icon"><i class="ti ${icon}"></i></span>
+              <span class="chip-name">${escHtml(name)}</span>
+              <span style="font-size:11px;opacity:0.5;flex-shrink:0;"><i class="ti ti-download"></i></span>
+            </a>`;
+  }).join('');
+  return `<div class="message-attachments-history" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${chips}</div>`;
+}
+
 /* ── Bubble builders ── */
-function appendUserBubble(text) {
+function appendUserBubble(text, attachments) {
+  const chipsHtml = buildAttachmentChipsHtml(attachments || []);
   const wrap = document.createElement('div');
   wrap.className = 'chat-bubble-wrap chat-bubble-wrap--user';
   wrap.innerHTML = `
     <div class="chat-bubble chat-bubble--user">
+      ${chipsHtml}
       <div class="chat-bubble-content">${escHtml(text)}</div>
       <div class="chat-bubble-time" style="font-size:11px;color:rgba(255,255,255,0.7);text-align:right;margin-top:4px">
         ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
@@ -247,27 +314,194 @@ function appendAgentBubble(content, ragSources, msgId) {
 }
 
 function setLoading(on) {
-  document.getElementById('chat-send-btn').disabled = on;
+  document.getElementById('chat-send-btn').disabled = on || uploadsInProgress > 0;
   document.getElementById('chat-input').disabled = on;
   document.getElementById('typing-indicator').style.display = on ? 'flex' : 'none';
   if (on) scrollToBottom();
 }
 
+/* ── Attachment state ── */
+let pendingAttachments = [];  // [{attachment_id, original_filename, file_category, mime_type, file_size_bytes}]
+let uploadsInProgress  = 0;
+
+/* ── File picker wiring ── */
+document.getElementById('attach-btn').addEventListener('click', () => {
+  document.getElementById('attach-file-input').click();
+});
+
+document.getElementById('attach-file-input').addEventListener('change', function() {
+  const files = Array.from(this.files);
+  if (pendingAttachments.length + files.length > 5) {
+    alert('You can attach a maximum of 5 files per message.');
+    this.value = '';
+    return;
+  }
+  files.forEach(file => handleFileSelected(file));
+  this.value = '';
+});
+
+function handleFileSelected(file) {
+  const MAX_BYTES   = 20 * 1024 * 1024;
+  const ALLOWED_EXT = ['jpg','jpeg','png','gif','webp','pdf','docx','txt','md','csv'];
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+
+  if (!ALLOWED_EXT.includes(ext)) {
+    showErrorChip(file.name, `File type .${ext} is not allowed.`);
+    return;
+  }
+  if (file.size > MAX_BYTES) {
+    showErrorChip(file.name, 'File exceeds 20 MB limit.');
+    return;
+  }
+
+  const chipId  = 'chip-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const isImage = file.type.startsWith('image/');
+
+  // Show spinner chip immediately
+  const chip = document.createElement('div');
+  chip.className = 'attach-chip';
+  chip.id = chipId;
+  chip.innerHTML = `
+    <span class="chip-icon"><i class="ti ti-loader-2" style="animation:spin 1s linear infinite;"></i></span>
+    <span class="chip-name">${truncate(file.name, 24)}</span>
+  `;
+  document.getElementById('attachment-chips').appendChild(chip);
+  document.getElementById('attachment-chips').style.display = 'flex';
+
+  let previewDataUrl = null;
+  const doUpload = () => {
+    uploadsInProgress++;
+    updateSendButton();
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const convId = {{ conv.id }};
+    fetch(`/agents/${convId}/attachments`, {
+      method: 'POST',
+      body:   formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+      uploadsInProgress--;
+      if (data.ok) {
+        pendingAttachments.push({
+          attachment_id:     data.attachment_id,
+          original_filename: data.original_filename,
+          file_category:     data.file_category,
+          mime_type:         data.mime_type,
+          file_size_bytes:   data.file_size_bytes,
+        });
+        const finalChip = document.getElementById(chipId);
+        if (finalChip) {
+          if (isImage && previewDataUrl) {
+            finalChip.innerHTML = `
+              <img class="chip-thumb" src="${previewDataUrl}" alt="">
+              <span class="chip-name">${truncate(data.original_filename, 20)}</span>
+              <span class="chip-remove" data-id="${data.attachment_id}" title="Remove">×</span>
+            `;
+          } else {
+            finalChip.innerHTML = `
+              <span class="chip-icon"><i class="ti ti-file-text"></i></span>
+              <span class="chip-name">${truncate(data.original_filename, 20)}</span>
+              <span class="chip-remove" data-id="${data.attachment_id}" title="Remove">×</span>
+            `;
+          }
+          finalChip.querySelector('.chip-remove').addEventListener('click', () => {
+            removeAttachment(data.attachment_id, chipId);
+          });
+        }
+      } else {
+        showErrorChip(file.name, data.error || 'Upload failed.', chipId);
+      }
+      updateSendButton();
+    })
+    .catch(() => {
+      uploadsInProgress--;
+      showErrorChip(file.name, 'Upload failed.', chipId);
+      updateSendButton();
+    });
+  };
+
+  if (isImage) {
+    const reader = new FileReader();
+    reader.onload = e => { previewDataUrl = e.target.result; doUpload(); };
+    reader.readAsDataURL(file);
+  } else {
+    doUpload();
+  }
+}
+
+function truncate(str, n) {
+  return str.length > n ? str.slice(0, n - 1) + '…' : str;
+}
+
+function showErrorChip(filename, message, existingChipId) {
+  const chipId = existingChipId || ('chip-err-' + Date.now());
+  let chip = existingChipId ? document.getElementById(existingChipId) : null;
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.id = chipId;
+    document.getElementById('attachment-chips').appendChild(chip);
+    document.getElementById('attachment-chips').style.display = 'flex';
+  }
+  chip.className = 'attach-chip upload-error';
+  chip.innerHTML = `
+    <span class="chip-icon"><i class="ti ti-alert-circle"></i></span>
+    <span class="chip-name" title="${message}">${truncate(filename, 16)}: ${truncate(message, 20)}</span>
+    <span class="chip-remove" title="Dismiss">×</span>
+  `;
+  chip.querySelector('.chip-remove').addEventListener('click', () => chip.remove());
+  updateChipsVisibility();
+}
+
+function removeAttachment(attachmentId, chipId) {
+  pendingAttachments = pendingAttachments.filter(a => a.attachment_id !== attachmentId);
+  const chip = document.getElementById(chipId);
+  if (chip) chip.remove();
+  updateChipsVisibility();
+}
+
+function updateChipsVisibility() {
+  const area = document.getElementById('attachment-chips');
+  area.style.display = area.children.length > 0 ? 'flex' : 'none';
+}
+
+function updateSendButton() {
+  const btn = document.getElementById('chat-send-btn');
+  if (btn) btn.disabled = uploadsInProgress > 0;
+}
+
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const text  = input.value.trim();
-  if (!text) return;
+  if (!text && pendingAttachments.length === 0) return;
+  if (uploadsInProgress > 0) return;
+
+  const messageText  = text;
+  const sentAttachments = pendingAttachments.slice();  // capture before clearing
 
   input.value = '';
   autoGrow(input);
-  appendUserBubble(text);
+  appendUserBubble(messageText, sentAttachments);
   setLoading(true);
+
+  const body = {
+    message:             messageText,
+    attachment_ids:      sentAttachments.map(a => a.attachment_id),
+    attachment_metadata: sentAttachments,
+  };
+
+  // Clear pending attachments immediately (optimistic)
+  pendingAttachments = [];
+  document.getElementById('attachment-chips').innerHTML = '';
+  updateChipsVisibility();
 
   try {
     const res  = await fetch(SEND_URL, {
       method:  'POST',
       headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({message: text}),
+      body:    JSON.stringify(body),
     });
     const data = await res.json();
     setLoading(false);
@@ -386,6 +620,62 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRagModa
 </script>
 
 <style>
+#attach-btn:hover { color: var(--accent); }
+
+.attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 8px;
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+  max-width: 220px;
+}
+.attach-chip img.chip-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.attach-chip .chip-icon {
+  font-size: 18px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.attach-chip .chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.attach-chip .chip-remove {
+  cursor: pointer;
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 14px;
+  margin-left: 2px;
+}
+.attach-chip .chip-remove:hover { color: var(--danger-text); }
+.attach-chip.upload-error {
+  border-color: var(--danger-text);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+.attach-chip-history {
+  text-decoration: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.attach-chip-history:hover {
+  background: var(--sidebar-hover, #e8edf5);
+  border-color: var(--accent);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .rag-pill {
   display: inline-flex;
   align-items: center;

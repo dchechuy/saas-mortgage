@@ -1,5 +1,27 @@
 # Changelog
 
+## [2026-05-09] - Conversation attachments — historical chips & dynamic bubble chips (Phase 5)
+- app/templates/agents/conversation.html: added Jinja2 attachment chips above message text for both user and assistant historical bubbles
+- app/templates/agents/conversation.html: added CSS .attach-chip-history with hover state for download links
+- app/templates/agents/conversation.html: added buildAttachmentChipsHtml() JS helper for dynamic bubble chips
+- app/templates/agents/conversation.html: appendUserBubble() now accepts attachments arg and prepends chips HTML
+- app/templates/agents/conversation.html: sendMessage() captures sentAttachments before clearing pendingAttachments and passes to appendUserBubble()
+- app/routes/agents.py: view_conversation passes attachments_by_message_id dict to template (Phase 5 Step 1)
+
+## [2026-05-09] - Conversation attachments chat UI — attach & send (Phase 4)
+- app/templates/agents/conversation.html: added paperclip button (left of send), hidden file input, and attachment chips area above input bar
+- app/templates/agents/conversation.html: added CSS for .attach-chip, chip sub-elements, error state, #attach-btn hover, and @keyframes spin
+- app/templates/agents/conversation.html: added JS — pendingAttachments/uploadsInProgress state, file picker wiring, handleFileSelected() with spinner→resolved chip flow, image thumbnail preview, truncate/showErrorChip/removeAttachment/updateChipsVisibility/updateSendButton helpers
+- app/templates/agents/conversation.html: modified sendMessage() to include attachment_ids + attachment_metadata in request body and clear chips on success
+
+## [2026-05-09] - Conversation attachments upload proxy and local storage (Phase 3)
+- app/models.py: added MessageAttachment model (local metadata mirror; file lives on skunkBOX)
+- migrations/928c0eaef896: migration for message_attachment table
+- app/routes/agents.py: added _upload_attachment_to_skunkbox() helper with size/extension validation
+- app/routes/agents.py: added POST /agents/<conv_id>/attachments upload proxy route
+- app/routes/agents.py: added GET /agents/attachments/<id>/download ownership-checked proxy route
+- app/routes/agents.py: send_message now accepts attachment_ids + attachment_metadata, forwards ids to skunkBOX, saves MessageAttachment rows after commit
+
 ## [2026-05-08] - UI polish + skunkBOX API logging
 
 ### Bug fixes

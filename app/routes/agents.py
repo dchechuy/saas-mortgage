@@ -16,6 +16,39 @@ agents_bp = Blueprint("agents", __name__, url_prefix="/agents")
 
 _SKUNK_TIMEOUT = 30  # seconds
 _DOCS_PER_PAGE = 25
+_ALLOWED_ATTACH_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp", "pdf", "docx", "txt", "md", "csv"}
+_MAX_ATTACH_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
+def _upload_attachment_to_skunkbox(integration, file_storage) -> dict:
+    """Upload a werkzeug FileStorage object to skunkBOX POST /api/v1/attachments.
+
+    Returns the parsed JSON response dict on success.
+    Raises ValueError for validation errors (bad extension, too large).
+    Raises requests.HTTPError for API errors.
+    """
+    filename = file_storage.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in _ALLOWED_ATTACH_EXTENSIONS:
+        raise ValueError(f"File type .{ext} is not allowed.")
+
+    file_bytes = file_storage.read()
+    if len(file_bytes) > _MAX_ATTACH_BYTES:
+        raise ValueError("File exceeds the 20 MB limit.")
+
+    base_url = (integration.base_url or "").rstrip("/")
+    if base_url.endswith("/api/v1"):
+        base_url = base_url[:-len("/api/v1")]
+    api_key = decrypt_value(integration.api_key_encrypted or "")
+
+    resp = http_requests.post(
+        f"{base_url}/api/v1/attachments",
+        files={"file": (filename, file_bytes, file_storage.content_type or "application/octet-stream")},
+        headers={"X-API-Key": api_key},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 def _get_docs_integration():
@@ -77,7 +110,8 @@ def _call_skunkbox_get(integration, path: str, params: dict = None) -> dict:
 
 def _call_skunkbox(integration, skunkbox_agent_id: int,
                    message: str, session_id: str,
-                   user_full_name: str = "", username: str = "") -> dict:
+                   user_full_name: str = "", username: str = "",
+                   attachment_ids: list = None) -> dict:
     """POST to skunkBOX /api/v1/chat/messages. Returns the JSON body or raises."""
     base_url = (integration.base_url or "").rstrip("/")
     if base_url.endswith("/api/v1"):
@@ -90,12 +124,14 @@ def _call_skunkbox(integration, skunkbox_agent_id: int,
         raise ValueError("Integration has no API key configured.")
 
     payload = {
-        "persona_id": skunkbox_agent_id,
-        "session_id": session_id,
+        "persona_id":     skunkbox_agent_id,
+        "session_id":     session_id,
         "user_full_name": user_full_name,
-        "username": username,
-        "message": message,
+        "username":       username,
+        "message":        message,
     }
+    if attachment_ids:
+        payload["attachment_ids"] = attachment_ids
 
     url = f"{base_url}/api/v1/chat/messages"
     t0 = time.monotonic()
@@ -262,6 +298,17 @@ def view_conversation(conversation_id):
         abort(403)
 
     raw_messages = conv.messages.order_by(AgentMessage.created_at).all()
+
+    from ..models import MessageAttachment
+    message_ids = [m.id for m in raw_messages]
+    attachments_by_message_id = {}
+    if message_ids:
+        att_records = MessageAttachment.query.filter(
+            MessageAttachment.message_id.in_(message_ids)
+        ).all()
+        for att in att_records:
+            attachments_by_message_id.setdefault(att.message_id, []).append(att)
+
     messages_data = [
         {
             "id":          m.id,
@@ -269,6 +316,15 @@ def view_conversation(conversation_id):
             "content":     m.content,
             "rag_sources": m.rag_sources_list,
             "created_at":  m.created_at.isoformat(),
+            "attachments": [
+                {
+                    "id":       a.skunkbox_attachment_id,
+                    "filename": a.original_filename,
+                    "category": a.file_category,
+                    "mime_type": a.mime_type,
+                }
+                for a in attachments_by_message_id.get(m.id, [])
+            ],
         }
         for m in raw_messages
     ]
@@ -278,6 +334,7 @@ def view_conversation(conversation_id):
         agent=conv.agent,
         messages=raw_messages,
         messages_data=messages_data,
+        attachments_by_message_id=attachments_by_message_id,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "Conversations", "url": url_for("agents.list_conversations")},
@@ -302,6 +359,10 @@ def send_message(conversation_id):
     content = (data.get("message") or "").strip()
     if not content:
         return jsonify({"ok": False, "error": "Message is empty."}), 400
+
+    raw_att_ids     = data.get("attachment_ids") or []
+    attachment_ids  = [int(x) for x in raw_att_ids if str(x).isdigit()][:5]
+    attachment_meta = data.get("attachment_metadata") or []  # list of dicts from frontend
 
     agent = conv.agent
     if not agent or not agent.is_active:
@@ -330,6 +391,7 @@ def send_message(conversation_id):
             session_id=conv.skunkbox_session_id,
             user_full_name=current_user.display_name or current_user.username,
             username=current_user.username,
+            attachment_ids=attachment_ids,
         )
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 502
@@ -362,6 +424,22 @@ def send_message(conversation_id):
     db.session.add(assistant_msg)
     db.session.commit()
 
+    # Save local MessageAttachment records using metadata sent by the frontend
+    from ..models import MessageAttachment as MsgAtt
+    for meta in attachment_meta:
+        try:
+            db.session.add(MsgAtt(
+                message_id             = user_msg.id,
+                skunkbox_attachment_id = int(meta["attachment_id"]),
+                original_filename      = meta["original_filename"],
+                mime_type              = meta["mime_type"],
+                file_category          = meta["file_category"],
+                file_size_bytes        = meta.get("file_size_bytes"),
+            ))
+        except (KeyError, ValueError):
+            pass  # skip malformed entries
+    db.session.commit()
+
     return jsonify({
         "ok": True,
         "user_message_id": user_msg.id,
@@ -372,6 +450,92 @@ def send_message(conversation_id):
             "rag_sources": raw_sources,
         },
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Attachment upload proxy
+# ─────────────────────────────────────────────────────────────────────────────
+
+@agents_bp.route("/<int:conversation_id>/attachments", methods=["POST"])
+@login_required
+@permission_required("agents", "view")
+def upload_attachment(conversation_id):
+    conv = db.get_or_404(AgentConversation, conversation_id)
+    if conv.user_id != current_user.id:
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"ok": False, "error": "No file provided."}), 400
+
+    agent = conv.agent
+    if not agent or not agent.is_active:
+        return jsonify({"ok": False, "error": "Agent not available."}), 400
+
+    try:
+        result = _upload_attachment_to_skunkbox(agent.integration, file)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Upload failed: {e}"}), 502
+
+    return jsonify({
+        "ok": True,
+        "attachment_id":     result["attachment_id"],
+        "original_filename": result["original_filename"],
+        "file_category":     result["file_category"],
+        "mime_type":         result["mime_type"],
+        "file_size_bytes":   result.get("file_size_bytes"),
+    })
+
+
+@agents_bp.route("/attachments/<int:skunkbox_attachment_id>/download")
+@login_required
+@permission_required("agents", "view")
+def download_attachment(skunkbox_attachment_id):
+    """Proxy a file download from skunkBOX.
+    Security: verify the current user owns a conversation containing this attachment.
+    """
+    from ..models import MessageAttachment
+
+    att_record = (
+        MessageAttachment.query
+        .join(AgentMessage, AgentMessage.id == MessageAttachment.message_id)
+        .join(AgentConversation, AgentConversation.id == AgentMessage.conversation_id)
+        .filter(
+            MessageAttachment.skunkbox_attachment_id == skunkbox_attachment_id,
+            AgentConversation.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not att_record:
+        abort(404)
+
+    msg  = db.session.get(AgentMessage, att_record.message_id)
+    conv = db.session.get(AgentConversation, msg.conversation_id)
+    integration = conv.agent.integration
+
+    base_url = (integration.base_url or "").rstrip("/")
+    if base_url.endswith("/api/v1"):
+        base_url = base_url[:-len("/api/v1")]
+    api_key = decrypt_value(integration.api_key_encrypted or "")
+
+    try:
+        resp = http_requests.get(
+            f"{base_url}/api/v1/attachments/{skunkbox_attachment_id}",
+            headers={"X-API-Key": api_key},
+            timeout=60,
+            stream=True,
+        )
+        resp.raise_for_status()
+        content_disposition = f'attachment; filename="{att_record.original_filename}"'
+        return Response(
+            stream_with_context(resp.iter_content(chunk_size=8192)),
+            content_type=resp.headers.get("Content-Type", "application/octet-stream"),
+            headers={"Content-Disposition": content_disposition},
+        )
+    except Exception:
+        abort(404)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
