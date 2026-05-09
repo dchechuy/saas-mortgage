@@ -4,17 +4,6 @@
 {% block title %}AI Conversations - saas-mortgage{% endblock %}
 {% block content %}
 
-<div class="sb-page-header" style="margin-bottom:20px">
-  <div>
-    <h1 class="page-title">Conversations</h1>
-  </div>
-  {% if ai_agents %}
-  <button type="button" class="btn btn-primary" onclick="openNewConvModal()">
-    + New Conversation
-  </button>
-  {% endif %}
-</div>
-
 <div class="tax-tabs" style="margin-bottom:24px">
   <a href="{{ url_for('agents.list_conversations') }}"
      class="tax-tab {{ 'active' if tab == 'mine' else '' }}">My Conversations</a>
@@ -22,6 +11,22 @@
      class="tax-tab {{ 'active' if tab == 'all' else '' }}">All Conversations</a>
   <a href="{{ url_for('agents.list_conversations', tab='favorites') }}"
      class="tax-tab {{ 'active' if tab == 'favorites' else '' }}">⭐ Favorites</a>
+</div>
+
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">
+      {% if tab == 'all' %}All Conversations
+      {% elif tab == 'favorites' %}Favorites
+      {% else %}My Conversations
+      {% endif %}
+    </h1>
+  </div>
+  {% if ai_agents %}
+  <button type="button" class="btn btn-primary" onclick="openNewConvModal()">
+    + New Conversation
+  </button>
+  {% endif %}
 </div>
 
 {# ── Agent tiles ── #}
