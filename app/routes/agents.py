@@ -1,3 +1,4 @@
+import time
 import uuid
 import requests as http_requests
 from flask import (Blueprint, Response, abort, flash, jsonify, redirect,
@@ -9,7 +10,7 @@ from ..activity_logger import log_activity
 from ..crypto import decrypt_value
 from ..extensions import db
 from sqlalchemy import func
-from ..models import AgentConversation, AgentMessage, AiAgent, Integration, User
+from ..models import AgentConversation, AgentMessage, AiAgent, ApiRequestLog, Integration, User
 
 agents_bp = Blueprint("agents", __name__, url_prefix="/agents")
 
@@ -22,6 +23,25 @@ def _get_docs_integration():
     return Integration.query.filter_by(use_case="Documents", is_active=True).first()
 
 
+def _log_api(integration, endpoint: str, method: str,
+             status_code: int = None, latency_ms: int = None,
+             error_message: str = None) -> None:
+    """Write one row to ApiRequestLog. Never raises."""
+    try:
+        db.session.add(ApiRequestLog(
+            integration_id=integration.id,
+            integration_name=integration.name,
+            endpoint=endpoint,
+            method=method,
+            status_code=status_code,
+            latency_ms=latency_ms,
+            error_message=error_message,
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 def _call_skunkbox_get(integration, path: str, params: dict = None) -> dict:
     """Generic GET to skunkBOX API. Returns JSON or raises."""
     base_url = (integration.base_url or "").rstrip("/")
@@ -32,14 +52,27 @@ def _call_skunkbox_get(integration, path: str, params: dict = None) -> dict:
     api_key = decrypt_value(integration.api_key_encrypted or "")
     if not api_key:
         raise ValueError("Integration has no API key configured.")
-    resp = http_requests.get(
-        f"{base_url}/api/v1/{path}",
-        params=params or {},
-        headers={"X-API-Key": api_key, "Accept": "application/json"},
-        timeout=_SKUNK_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()
+
+    url = f"{base_url}/api/v1/{path}"
+    t0 = time.monotonic()
+    try:
+        resp = http_requests.get(
+            url,
+            params=params or {},
+            headers={"X-API-Key": api_key, "Accept": "application/json"},
+            timeout=_SKUNK_TIMEOUT,
+        )
+        latency = int((time.monotonic() - t0) * 1000)
+        _log_api(integration, url, "GET", resp.status_code, latency,
+                 None if resp.ok else resp.text[:500])
+        resp.raise_for_status()
+        return resp.json()
+    except http_requests.HTTPError:
+        raise
+    except Exception as exc:
+        latency = int((time.monotonic() - t0) * 1000)
+        _log_api(integration, url, "GET", None, latency, str(exc)[:500])
+        raise
 
 
 def _call_skunkbox(integration, skunkbox_agent_id: int,
@@ -47,7 +80,6 @@ def _call_skunkbox(integration, skunkbox_agent_id: int,
                    user_full_name: str = "", username: str = "") -> dict:
     """POST to skunkBOX /api/v1/chat/messages. Returns the JSON body or raises."""
     base_url = (integration.base_url or "").rstrip("/")
-    # Normalise: strip trailing /api/v1 so the path below never doubles it
     if base_url.endswith("/api/v1"):
         base_url = base_url[:-len("/api/v1")]
     if not base_url:
@@ -65,14 +97,26 @@ def _call_skunkbox(integration, skunkbox_agent_id: int,
         "message": message,
     }
 
-    resp = http_requests.post(
-        f"{base_url}/api/v1/chat/messages",
-        json=payload,
-        headers={"X-API-Key": api_key, "Content-Type": "application/json"},
-        timeout=_SKUNK_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    url = f"{base_url}/api/v1/chat/messages"
+    t0 = time.monotonic()
+    try:
+        resp = http_requests.post(
+            url,
+            json=payload,
+            headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+            timeout=_SKUNK_TIMEOUT,
+        )
+        latency = int((time.monotonic() - t0) * 1000)
+        _log_api(integration, url, "POST", resp.status_code, latency,
+                 None if resp.ok else resp.text[:500])
+        resp.raise_for_status()
+        return resp.json()
+    except http_requests.HTTPError:
+        raise
+    except Exception as exc:
+        latency = int((time.monotonic() - t0) * 1000)
+        _log_api(integration, url, "POST", None, latency, str(exc)[:500])
+        raise
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -347,7 +391,9 @@ def learning_center():
 
     if integration:
         try:
-            # ── 1. Fetch all docs once (small corpus) to discover collections ──
+            # ── Single API call: fetch the full corpus (≤500 docs) ─────────
+            # Filtering and pagination are done in Python to avoid a second
+            # round-trip and stay well within the 10 RPM rate limit.
             all_data = _call_skunkbox_get(integration, "documents", {
                 "limit": 500, "offset": 0,
             })
@@ -355,7 +401,8 @@ def learning_center():
                         or all_data.get("data")
                         or (all_data if isinstance(all_data, list) else []))
 
-            seen = {}
+            # Build sorted collections list from the corpus
+            seen: dict = {}
             for d in all_docs:
                 for c in (d.get("collections") or []):
                     seen[c["id"]] = c["name"]
@@ -364,21 +411,23 @@ def learning_center():
                 key=lambda c: c["name"].lower(),
             )
 
-            # ── 2. Fetch paginated docs for the active tab ──────────────────
-            params: dict = {"limit": _DOCS_PER_PAGE, "offset": (page - 1) * _DOCS_PER_PAGE}
+            # Filter by collection when a collection tab is active
             if active_tab != "all":
                 try:
-                    params["collection_id"] = int(active_tab)
+                    coll_id = int(active_tab)
+                    all_docs = [
+                        d for d in all_docs
+                        if any(c["id"] == coll_id for c in (d.get("collections") or []))
+                    ]
                 except ValueError:
                     active_tab = "all"
 
-            data = _call_skunkbox_get(integration, "documents", params)
-            docs = (data.get("documents") or data.get("items")
-                    or data.get("data")
-                    or (data if isinstance(data, list) else []))
-            total = int(data.get("total") or data.get("count")
-                        or data.get("total_count") or len(docs))
+            # Paginate in Python
+            total = len(all_docs)
             total_pages = max(1, (total + _DOCS_PER_PAGE - 1) // _DOCS_PER_PAGE)
+            page = min(page, total_pages)
+            start = (page - 1) * _DOCS_PER_PAGE
+            docs = all_docs[start: start + _DOCS_PER_PAGE]
 
         except Exception as exc:
             error = str(exc)

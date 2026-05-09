@@ -57,44 +57,62 @@
 {# ── Filter panel (All Conversations only) ── #}
 {% if tab == 'all' %}
 <form method="get" action="{{ url_for('agents.list_conversations') }}"
-      style="margin-bottom:24px">
+      id="all-filter-form" style="margin-bottom:24px">
   <input type="hidden" name="tab" value="all">
   <div class="card" style="padding:18px 22px">
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
 
-      {# Agent multi-select #}
-      <div style="flex:1;min-width:180px">
+      {# ── Agent dropdown multi-select ── #}
+      <div style="flex:1;min-width:180px;position:relative" class="ms-wrap" id="ms-agent">
         <label class="filter-label">Agent</label>
-        <select name="agent_ids" multiple class="form-select filter-multiselect">
+        <button type="button" class="ms-trigger" onclick="toggleMsDrop('ms-agent')">
+          <span class="ms-label" id="ms-agent-label">
+            {% if f_agent_ids %}{{ f_agent_ids|length }} selected{% else %}All agents{% endif %}
+          </span>
+          <span class="ms-caret">▾</span>
+        </button>
+        <div class="ms-drop" id="ms-agent-drop">
           {% for agent in ai_agents %}
-          <option value="{{ agent.id }}"
-                  {{ 'selected' if agent.id in f_agent_ids else '' }}>
+          <label class="ms-option">
+            <input type="checkbox" name="agent_ids" value="{{ agent.id }}"
+                   {{ 'checked' if agent.id in f_agent_ids else '' }}
+                   onchange="updateMsLabel('ms-agent', 'All agents')">
             {{ agent.name }}
-          </option>
+          </label>
           {% endfor %}
-        </select>
+        </div>
       </div>
 
-      {# User multi-select #}
-      <div style="flex:1;min-width:180px">
+      {# ── User dropdown multi-select ── #}
+      <div style="flex:1;min-width:180px;position:relative" class="ms-wrap" id="ms-user">
         <label class="filter-label">User</label>
-        <select name="user_ids" multiple class="form-select filter-multiselect">
-          <option value="{{ current_user.id }}"
-                  {{ 'selected' if current_user.id in f_user_ids else '' }}>
+        <button type="button" class="ms-trigger" onclick="toggleMsDrop('ms-user')">
+          <span class="ms-label" id="ms-user-label">
+            {% if f_user_ids %}{{ f_user_ids|length }} selected{% else %}All users{% endif %}
+          </span>
+          <span class="ms-caret">▾</span>
+        </button>
+        <div class="ms-drop" id="ms-user-drop">
+          <label class="ms-option">
+            <input type="checkbox" name="user_ids" value="{{ current_user.id }}"
+                   {{ 'checked' if current_user.id in f_user_ids else '' }}
+                   onchange="updateMsLabel('ms-user', 'All users')">
             My Conversations
-          </option>
+          </label>
           {% for u in all_users %}
           {% if u.id != current_user.id %}
-          <option value="{{ u.id }}"
-                  {{ 'selected' if u.id in f_user_ids else '' }}>
+          <label class="ms-option">
+            <input type="checkbox" name="user_ids" value="{{ u.id }}"
+                   {{ 'checked' if u.id in f_user_ids else '' }}
+                   onchange="updateMsLabel('ms-user', 'All users')">
             {{ u.display_name or u.username }}
-          </option>
+          </label>
           {% endif %}
           {% endfor %}
-        </select>
+        </div>
       </div>
 
-      {# Date range #}
+      {# ── Date range ── #}
       <div style="flex:1;min-width:280px">
         <label class="filter-label">Date Range</label>
         <div style="display:flex;gap:8px;align-items:center">
@@ -106,7 +124,7 @@
         </div>
       </div>
 
-      {# Apply / Clear #}
+      {# ── Apply / Clear ── #}
       <div style="display:flex;gap:8px;padding-bottom:1px">
         <button type="submit" class="btn btn-primary">Apply</button>
         {% if f_agent_ids or f_user_ids or f_date_from or f_date_to %}
@@ -275,10 +293,59 @@
   color: var(--muted);
   margin-bottom: 6px;
 }
-.filter-multiselect {
-  min-height: 90px;
-  font-size: 13px;
+
+/* Dropdown multi-select */
+.ms-wrap { position: relative; }
+
+.ms-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s;
 }
+.ms-trigger:hover { border-color: var(--accent); }
+.ms-trigger:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
+
+.ms-caret { color: var(--muted); font-size: 11px; margin-left: 8px; flex-shrink: 0; }
+
+.ms-drop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+  z-index: 200;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.ms-drop.open { display: block; }
+
+.ms-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.ms-option:hover { background: var(--panel-muted); }
+.ms-option input[type="checkbox"] { flex-shrink: 0; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 </style>
 
 <script>
@@ -428,5 +495,31 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 {% endif %}
+
+<script>
+/* ── Dropdown multi-select ── */
+function toggleMsDrop(wrapperId) {
+  var wrap = document.getElementById(wrapperId);
+  var drop = wrap.querySelector('.ms-drop');
+  var isOpen = drop.classList.contains('open');
+  // Close all open dropdowns first
+  document.querySelectorAll('.ms-drop.open').forEach(function(d) { d.classList.remove('open'); });
+  if (!isOpen) drop.classList.add('open');
+}
+
+function updateMsLabel(wrapperId, emptyLabel) {
+  var wrap  = document.getElementById(wrapperId);
+  var checked = wrap.querySelectorAll('input[type="checkbox"]:checked');
+  var label = wrap.querySelector('.ms-label');
+  label.textContent = checked.length === 0 ? emptyLabel : checked.length + ' selected';
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.ms-wrap')) {
+    document.querySelectorAll('.ms-drop.open').forEach(function(d) { d.classList.remove('open'); });
+  }
+});
+</script>
 
 {% endblock %}

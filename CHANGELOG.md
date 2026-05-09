@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-05-08] - UI polish + skunkBOX API logging
+
+### Bug fixes
+- **All Conversations filters** — replaced native `<select multiple>` list boxes with custom dropdown multi-selects for Agent and User; trigger shows "All agents" / "N selected"; checkboxes inside a styled panel; closes on outside click; sticky selection state preserved
+- **Learning Center rate limit fix** — eliminated double API call on list page; now makes a single `limit=500` fetch and handles collection filtering + pagination entirely in Python, staying within the 10 RPM rate limit
+- **AI Agents Config** — agent logo now renders as a clean round circle, matching the Conversations list; image wrapped in `overflow:hidden` div instead of relying on `border-radius` on the `<img>` tag alone
+
+### External API request logging
+- `_call_skunkbox_get()` and `_call_skunkbox()` in `agents.py` now write one `ApiRequestLog` row per call with `integration_id`, `integration_name`, `endpoint` (full URL), `method`, `status_code`, `latency_ms`, and `error_message`
+- New `_log_api()` helper wraps the DB write in try/except so a logging failure never breaks the API call
+- All skunkBOX traffic (chat messages, document list, document detail) now appears in Reporting → External API Requests
+
 ## [2026-05-08] - Learning Center collection tabs
 
 ### Feature
