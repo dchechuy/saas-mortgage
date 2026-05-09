@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-05-08] - Learning Center collection tabs
+
+### Feature
+- Removed "Conversations" tab from the Learning Center tab bar
+- Added **All Documents** as the first tab (shows all docs across all collections, includes Collection column)
+- Added one tab per document collection, sorted A-Z — tabs are discovered dynamically by scanning the documents API response (no separate collections endpoint required)
+- Collection column hidden when viewing a specific collection tab (redundant in that context)
+- Pagination links now carry `?tab=<id>&page=N` so the active tab is preserved when paging
+- `learning_center()` route makes one broad fetch (`limit=500`) to build the collections list, then a separate paginated fetch filtered by `collection_id` for the active tab
+
 ## [2026-05-08] - Navigation restructure + Conversations filter panel
 
 ### Home page change

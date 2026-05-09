@@ -339,25 +339,47 @@ def send_message(conversation_id):
 @login_required
 @permission_required("agents", "view")
 def learning_center():
-    page = request.args.get("page", 1, type=int)
+    page       = request.args.get("page", 1, type=int)
+    active_tab = request.args.get("tab", "all")   # "all" or str(collection_id)
     integration = _get_docs_integration()
     docs, total, total_pages, error = [], 0, 1, None
+    collections = []   # [{id, name}] sorted A-Z
 
     if integration:
         try:
-            offset = (page - 1) * _DOCS_PER_PAGE
-            data = _call_skunkbox_get(integration, "documents", {
-                "limit":  _DOCS_PER_PAGE,
-                "offset": offset,
+            # ── 1. Fetch all docs once (small corpus) to discover collections ──
+            all_data = _call_skunkbox_get(integration, "documents", {
+                "limit": 500, "offset": 0,
             })
-            # skunkBOX returns {documents:[...], total:N, limit:N, offset:N}
-            docs = (data.get("documents")
-                    or data.get("items")
+            all_docs = (all_data.get("documents") or all_data.get("items")
+                        or all_data.get("data")
+                        or (all_data if isinstance(all_data, list) else []))
+
+            seen = {}
+            for d in all_docs:
+                for c in (d.get("collections") or []):
+                    seen[c["id"]] = c["name"]
+            collections = sorted(
+                [{"id": cid, "name": name} for cid, name in seen.items()],
+                key=lambda c: c["name"].lower(),
+            )
+
+            # ── 2. Fetch paginated docs for the active tab ──────────────────
+            params: dict = {"limit": _DOCS_PER_PAGE, "offset": (page - 1) * _DOCS_PER_PAGE}
+            if active_tab != "all":
+                try:
+                    params["collection_id"] = int(active_tab)
+                except ValueError:
+                    active_tab = "all"
+
+            data = _call_skunkbox_get(integration, "documents", params)
+            docs = (data.get("documents") or data.get("items")
                     or data.get("data")
                     or (data if isinstance(data, list) else []))
             total = int(data.get("total") or data.get("count")
                         or data.get("total_count") or len(docs))
             total_pages = max(1, (total + _DOCS_PER_PAGE - 1) // _DOCS_PER_PAGE)
+
         except Exception as exc:
             error = str(exc)
 
@@ -370,6 +392,8 @@ def learning_center():
         total_pages=total_pages,
         integration=integration,
         error=error,
+        collections=collections,
+        active_tab=active_tab,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "AI Agents", "url": url_for("agents.list_conversations")},

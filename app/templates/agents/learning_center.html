@@ -3,15 +3,26 @@
 {% block title %}Learning Center - saas-mortgage{% endblock %}
 {% block content %}
 
+{# ── Tab bar ── #}
 <div class="tax-tabs" style="margin-bottom:24px">
-  <a href="{{ url_for('agents.list_conversations') }}" class="tax-tab">Conversations</a>
-  <a href="{{ url_for('agents.learning_center') }}" class="tax-tab active">Learning Center</a>
+  <a href="{{ url_for('agents.learning_center', tab='all') }}"
+     class="tax-tab {{ 'active' if active_tab == 'all' else '' }}">All Documents</a>
+  {% for coll in collections %}
+  <a href="{{ url_for('agents.learning_center', tab=coll.id) }}"
+     class="tax-tab {{ 'active' if active_tab == coll.id|string else '' }}">
+    {{ coll.name }}
+  </a>
+  {% endfor %}
 </div>
 
 <div class="sb-page-header">
   <div>
-    <h1 class="page-title">Learning Center</h1>
-    <p class="muted" style="margin:4px 0 0">Browse reference documents and resources.</p>
+    <h1 class="page-title">
+      {% if active_tab == 'all' %}All Documents
+      {% else %}
+        {% for coll in collections %}{% if coll.id|string == active_tab %}{{ coll.name }}{% endif %}{% endfor %}
+      {% endif %}
+    </h1>
   </div>
 </div>
 
@@ -40,7 +51,7 @@
 
 {# ── Empty collection ── #}
 {% elif not docs %}
-{{ empty_state("No documents found", "The document collection is empty.", "file") }}
+{{ empty_state("No documents found", "This collection has no documents yet.", "file") }}
 
 {# ── Document list ── #}
 {% else %}
@@ -51,7 +62,7 @@
         <tr>
           <th style="width:36px"></th>
           <th>Title</th>
-          <th>Collection</th>
+          {% if active_tab == 'all' %}<th>Collection</th>{% endif %}
           <th>Type</th>
           <th>Status</th>
           <th style="text-align:right">Pages</th>
@@ -98,7 +109,8 @@
             {% endif %}
           </td>
 
-          {# Collection — API returns collections:[{id,name}] #}
+          {# Collection (only on All Documents tab) #}
+          {% if active_tab == 'all' %}
           <td style="font-size:13px;color:var(--muted)">
             {% set colls = doc.get('collections') or [] %}
             {% if colls %}
@@ -107,6 +119,7 @@
               {{ doc.get('collection_name') or doc.get('collection') or '—' }}
             {% endif %}
           </td>
+          {% endif %}
 
           {# Type badge #}
           <td>
@@ -161,19 +174,18 @@
   <div style="display:flex;gap:4px;align-items:center">
 
     {% if page > 1 %}
-    <a href="?page={{ page - 1 }}" class="btn btn-secondary btn-sm">← Prev</a>
+    <a href="?tab={{ active_tab }}&page={{ page - 1 }}" class="btn btn-secondary btn-sm">← Prev</a>
     {% else %}
     <button class="btn btn-secondary btn-sm" disabled>← Prev</button>
     {% endif %}
 
-    {# Smart page range: always show first, last, and window around current #}
     {% set ns = namespace(last_shown=0) %}
     {% for p in range(1, total_pages + 1) %}
       {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
         {% if ns.last_shown > 0 and p > ns.last_shown + 1 %}
         <span style="padding:0 2px;color:var(--muted)">…</span>
         {% endif %}
-        <a href="?page={{ p }}"
+        <a href="?tab={{ active_tab }}&page={{ p }}"
            class="btn btn-sm {{ 'btn-primary' if p == page else 'btn-secondary' }}"
            style="min-width:34px">{{ p }}</a>
         {% set ns.last_shown = p %}
@@ -181,7 +193,7 @@
     {% endfor %}
 
     {% if page < total_pages %}
-    <a href="?page={{ page + 1 }}" class="btn btn-secondary btn-sm">Next →</a>
+    <a href="?tab={{ active_tab }}&page={{ page + 1 }}" class="btn btn-secondary btn-sm">Next →</a>
     {% else %}
     <button class="btn btn-secondary btn-sm" disabled>Next →</button>
     {% endif %}
