@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-05-10] - Fix Generate Release Notes: always shows only new entries
+- app/models.py: added changelog_snapshot (TEXT) column to ReleaseNote
+- app/routes/help.py: generate_release() saves CHANGELOG.md text snapshot at publish time
+- app/routes/help.py: changelog_preview() diffs against snapshot instead of git commit hash
+- migrations/versions/b543b16784f2: adds column + backfills v1.0.0 snapshot so next generation shows only post-v1.0.0 entries
+
 ## [2026-05-10] - My Conversations: agent tiles become a ribbon on overflow
 - app/templates/agents/list.html: tiles stay full-size (268×303px); overflow:hidden + translateX ribbon with ‹ › arrows activates only when tiles exceed available width
 - app/templates/agents/list.html: arrows hidden when all tiles fit; re-evaluated on window resize

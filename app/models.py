@@ -138,7 +138,8 @@ class ReleaseNote(db.Model):
     content_html = db.Column(db.Text, nullable=True)             # AI-generated HTML content
     status = db.Column(db.String(20), nullable=False, default="published")  # published | draft
     published_at = db.Column(db.DateTime, nullable=True)
-    changelog_commit_hash = db.Column(db.String(40), nullable=True)  # git HEAD at generation time
+    changelog_commit_hash = db.Column(db.String(40), nullable=True)   # git HEAD at generation time (legacy)
+    changelog_snapshot    = db.Column(db.Text,        nullable=True)   # full CHANGELOG.md text at generation time
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 

@@ -190,14 +190,14 @@ def changelog_preview():
         .first()
     )
 
-    head = _head_commit()
-    git_available = head is not None
     warning = ""
+    last_published_utc = None
 
-    if not git_available:
-        new_content = current_content
-        warning = "⚠ git not available — showing full changelog"
+    if last and last.changelog_snapshot:
+        # Best path: compare against the snapshot saved at generation time
+        new_content = _new_changelog_lines(last.changelog_snapshot, current_content)
     elif last and last.changelog_commit_hash:
+        # Legacy fallback: try to read CHANGELOG.md from git history
         old_content = _changelog_at(last.changelog_commit_hash)
         if old_content is None:
             new_content = current_content
@@ -212,18 +212,15 @@ def changelog_preview():
 
     if warning:
         message = warning
-        last_published_utc = None
-    elif last and last.changelog_commit_hash:
-        short = last.changelog_commit_hash[:7]
+    elif last and (last.changelog_snapshot or last.changelog_commit_hash):
         last_published_utc = last.published_at.isoformat() if last.published_at else None
         if has_entries:
-            message = f"Changes since v{last.version_string} (commit {short})"
+            message = f"Changes since v{last.version_string}"
         else:
             message = f"No new changelog entries since v{last.version_string}"
     else:
         message = ("Showing full changelog (no previous release)"
                    if has_entries else "No changelog entries found")
-        last_published_utc = None
 
     entry_count = len([ln for ln in new_content.splitlines() if ln.startswith("## ")])
     return jsonify({
@@ -254,13 +251,24 @@ def generate_release():
     try:
         from ..release_manager import create_release
 
-        # Capture HEAD before creating so this commit marks the baseline for the next diff
+        # Capture HEAD and CHANGELOG.md snapshot before creating,
+        # so the next diff knows exactly where this release ended.
         head = _head_commit()
+        repo = _repo_root()
+        changelog_path = os.path.join(repo, "CHANGELOG.md")
+        try:
+            with open(changelog_path, "r", encoding="utf-8") as fh:
+                changelog_snap = fh.read()
+        except FileNotFoundError:
+            changelog_snap = None
 
         note = create_release(raw_summary, current_user.id, release_type_override)
 
         if head:
             note.changelog_commit_hash = head
+        if changelog_snap is not None:
+            note.changelog_snapshot = changelog_snap
+        if head or changelog_snap is not None:
             db.session.commit()
 
         flash(f"Release v{note.version_string} published successfully.", "success")
