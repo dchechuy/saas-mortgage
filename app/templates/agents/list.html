@@ -425,7 +425,7 @@ async function toggleFavorite(btn) {
             align-items:center;justify-content:center;z-index:1060;padding:24px"
      onclick="if(event.target===this)closeNewConvModal()">
 
-  <div style="background:var(--panel);border-radius:14px;width:100%;max-width:780px;
+  <div style="background:var(--panel);border-radius:14px;width:100%;max-width:975px;
               box-shadow:0 12px 48px rgba(0,0,0,0.3);display:flex;flex-direction:column;
               max-height:90vh" onclick="event.stopPropagation()">
 
@@ -441,32 +441,56 @@ async function toggleFavorite(btn) {
     {# Scrollable body #}
     <div style="padding:24px 28px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:24px">
 
-      {# Agent picker #}
+      {# Agent ribbon #}
       <div>
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;
                     letter-spacing:0.07em;color:var(--muted);margin-bottom:14px">
           Choose an Agent
         </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          {% for agent in ai_agents %}
-          <div class="agent-tile new-conv-tile"
-               data-agent-id="{{ agent.id }}"
-               onclick="selectNewConvAgent(this)"
-               style="cursor:pointer">
-            {% if agent.avatar_filename %}
-            <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
-                 class="agent-tile-avatar">
-            {% else %}
-            <div class="agent-tile-initial">{{ agent.name[0].upper() }}</div>
-            {% endif %}
-            <div class="agent-tile-body">
-              <div class="agent-tile-name">{{ agent.name }}</div>
-              {% if agent.description %}
-              <div class="agent-tile-desc">{{ agent.description }}</div>
-              {% endif %}
+        <div style="position:relative">
+          {# Left arrow #}
+          <button id="ribbon-prev" onclick="ribbonPrev()"
+                  style="position:absolute;left:0;top:50%;transform:translateY(-50%);
+                         z-index:10;background:var(--panel);border:1px solid var(--border);
+                         border-radius:50%;width:36px;height:36px;cursor:pointer;
+                         display:flex;align-items:center;justify-content:center;
+                         color:var(--text);font-size:20px;line-height:1;
+                         box-shadow:0 2px 8px rgba(0,0,0,0.18);
+                         transition:opacity 0.2s;flex-shrink:0">&#8249;</button>
+          {# Ribbon viewport #}
+          <div style="overflow:hidden;margin:0 48px">
+            <div id="agent-ribbon"
+                 style="display:flex;gap:12px;transition:transform 0.28s cubic-bezier(.4,0,.2,1)">
+              {% for agent in ai_agents %}
+              <div class="agent-tile new-conv-tile"
+                   data-agent-id="{{ agent.id }}"
+                   onclick="selectNewConvAgent(this)"
+                   style="flex-shrink:0;width:190px;height:200px;cursor:pointer">
+                {% if agent.avatar_filename %}
+                <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
+                     class="agent-tile-avatar">
+                {% else %}
+                <div class="agent-tile-initial" style="font-size:52px">{{ agent.name[0].upper() }}</div>
+                {% endif %}
+                <div class="agent-tile-body">
+                  <div class="agent-tile-name" style="font-size:14px">{{ agent.name }}</div>
+                  {% if agent.description %}
+                  <div class="agent-tile-desc" style="font-size:12px">{{ agent.description }}</div>
+                  {% endif %}
+                </div>
+              </div>
+              {% endfor %}
             </div>
           </div>
-          {% endfor %}
+          {# Right arrow #}
+          <button id="ribbon-next" onclick="ribbonNext()"
+                  style="position:absolute;right:0;top:50%;transform:translateY(-50%);
+                         z-index:10;background:var(--panel);border:1px solid var(--border);
+                         border-radius:50%;width:36px;height:36px;cursor:pointer;
+                         display:flex;align-items:center;justify-content:center;
+                         color:var(--text);font-size:20px;line-height:1;
+                         box-shadow:0 2px 8px rgba(0,0,0,0.18);
+                         transition:opacity 0.2s;flex-shrink:0">&#8250;</button>
         </div>
       </div>
 
@@ -559,11 +583,47 @@ async function toggleFavorite(btn) {
 let modalPendingAtts = [];      // [{attachment_id, original_filename, file_category, mime_type, file_size_bytes}]
 let modalUploadsInProgress = 0; // used to block submit while files are still uploading
 
+/* ── Ribbon ── */
+const RIBBON_TILE_W  = 190 + 12;  // tile width + gap
+const RIBBON_VISIBLE = 4;         // tiles shown at once
+let   ribbonOffset   = 0;
+
+function ribbonUpdate() {
+  const tiles = document.querySelectorAll('.new-conv-tile');
+  const total = tiles.length;
+  document.getElementById('agent-ribbon').style.transform =
+    `translateX(-${ribbonOffset * RIBBON_TILE_W}px)`;
+  const canPrev = ribbonOffset > 0;
+  const canNext = ribbonOffset < total - RIBBON_VISIBLE;
+  document.getElementById('ribbon-prev').style.opacity = canPrev ? '1' : '0.25';
+  document.getElementById('ribbon-prev').style.pointerEvents = canPrev ? 'auto' : 'none';
+  document.getElementById('ribbon-next').style.opacity = canNext ? '1' : '0.25';
+  document.getElementById('ribbon-next').style.pointerEvents = canNext ? 'auto' : 'none';
+  // Hide arrows entirely when all tiles fit
+  const show = total > RIBBON_VISIBLE;
+  document.getElementById('ribbon-prev').style.display = show ? 'flex' : 'none';
+  document.getElementById('ribbon-next').style.display = show ? 'flex' : 'none';
+}
+
+function ribbonPrev() {
+  ribbonOffset = Math.max(0, ribbonOffset - 1);
+  ribbonUpdate();
+}
+
+function ribbonNext() {
+  const total = document.querySelectorAll('.new-conv-tile').length;
+  ribbonOffset = Math.min(total - RIBBON_VISIBLE, ribbonOffset + 1);
+  ribbonUpdate();
+}
+
 function openNewConvModal() {
   document.getElementById('new-conv-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  // Reset ribbon to start and auto-select first agent
+  ribbonOffset = 0;
+  ribbonUpdate();
   const tiles = document.querySelectorAll('.new-conv-tile');
-  if (tiles.length === 1) selectNewConvAgent(tiles[0]);
+  if (tiles.length > 0) selectNewConvAgent(tiles[0]);
   setTimeout(() => document.getElementById('new-conv-question').focus(), 60);
 }
 

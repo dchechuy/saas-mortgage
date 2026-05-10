@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-05-10] - New Conversation modal: ribbon picker, wider, auto-select
+- app/templates/agents/list.html: modal is 25% wider (780→975px)
+- app/templates/agents/list.html: agent picker replaced with horizontal ribbon with left/right arrows; agents already sorted by last-use from route
+- app/templates/agents/list.html: first agent auto-selected on modal open; arrows hidden when all tiles fit
+
 ## [2026-05-10] - New Conversation modal: attachment support
 - app/routes/agents.py: new_conversation() returns JSON when X-Requested-With: XMLHttpRequest so modal can get conv_id before navigating
 - app/templates/agents/list.html: added paperclip button, file input, attachment chips, and async submitNewConv() that creates conv then uploads files
