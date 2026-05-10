@@ -29,28 +29,51 @@
   {% endif %}
 </div>
 
-{# ── Agent tiles (hidden on All Conversations and Favorites tabs) ── #}
+{# ── Agent tiles — single-row ribbon (arrows appear only when tiles overflow) ── #}
 {% if ai_agents and tab not in ['all', 'favorites'] %}
-<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
-  {% for agent in ai_agents %}
-  <form method="post" action="{{ url_for('agents.new_conversation') }}" style="margin:0">
-    <input type="hidden" name="agent_id" value="{{ agent.id }}">
-    <button type="submit" class="agent-tile">
-      {% if agent.avatar_filename %}
-      <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
-           class="agent-tile-avatar">
-      {% else %}
-      <div class="agent-tile-initial">{{ agent.name[0].upper() }}</div>
-      {% endif %}
-      <div class="agent-tile-body">
-        <div class="agent-tile-name">{{ agent.name }}</div>
-        {% if agent.description %}
-        <div class="agent-tile-desc">{{ agent.description }}</div>
-        {% endif %}
-      </div>
-    </button>
-  </form>
-  {% endfor %}
+<div style="position:relative;margin-bottom:28px" id="page-ribbon-wrap">
+
+  <button type="button" id="page-ribbon-prev" onclick="pageRibbonPrev()"
+          style="display:none;position:absolute;left:0;top:50%;transform:translateY(-50%);
+                 z-index:10;background:var(--panel);border:1px solid var(--border);
+                 border-radius:50%;width:40px;height:40px;cursor:pointer;
+                 align-items:center;justify-content:center;
+                 color:var(--text);font-size:22px;line-height:1;
+                 box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:opacity 0.2s">&#8249;</button>
+
+  <div id="page-ribbon-vp" style="overflow:hidden">
+    <div id="page-ribbon"
+         style="display:flex;gap:12px;transition:transform 0.28s cubic-bezier(.4,0,.2,1)">
+      {% for agent in ai_agents %}
+      <form method="post" action="{{ url_for('agents.new_conversation') }}"
+            style="margin:0;flex-shrink:0">
+        <input type="hidden" name="agent_id" value="{{ agent.id }}">
+        <button type="submit" class="agent-tile">
+          {% if agent.avatar_filename %}
+          <img src="{{ url_for('static', filename='uploads/agent_avatars/' ~ agent.avatar_filename) }}"
+               class="agent-tile-avatar">
+          {% else %}
+          <div class="agent-tile-initial">{{ agent.name[0].upper() }}</div>
+          {% endif %}
+          <div class="agent-tile-body">
+            <div class="agent-tile-name">{{ agent.name }}</div>
+            {% if agent.description %}
+            <div class="agent-tile-desc">{{ agent.description }}</div>
+            {% endif %}
+          </div>
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+
+  <button type="button" id="page-ribbon-next" onclick="pageRibbonNext()"
+          style="display:none;position:absolute;right:0;top:50%;transform:translateY(-50%);
+                 z-index:10;background:var(--panel);border:1px solid var(--border);
+                 border-radius:50%;width:40px;height:40px;cursor:pointer;
+                 align-items:center;justify-content:center;
+                 color:var(--text);font-size:22px;line-height:1;
+                 box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:opacity 0.2s">&#8250;</button>
 </div>
 {% endif %}
 
@@ -416,6 +439,82 @@ async function toggleFavorite(btn) {
     }
   } catch (e) { console.error('Toggle favorite failed', e); }
 }
+
+/* ── Page-level agent ribbon ── */
+(function () {
+  const TILE_W = 268 + 12;   // .agent-tile width + gap
+  let offset = 0;
+
+  function getEls() {
+    return {
+      wrap:  document.getElementById('page-ribbon-wrap'),
+      vp:    document.getElementById('page-ribbon-vp'),
+      inner: document.getElementById('page-ribbon'),
+      prev:  document.getElementById('page-ribbon-prev'),
+      next:  document.getElementById('page-ribbon-next'),
+    };
+  }
+
+  function init() {
+    const { wrap, vp, inner, prev, next } = getEls();
+    if (!wrap) return;                         // not on this tab
+    const total     = inner.children.length;
+    const vpW       = wrap.offsetWidth;        // full available width
+    const visible   = Math.floor(vpW / TILE_W);
+    const needArrow = total > visible;
+
+    if (needArrow) {
+      vp.style.margin = '0 52px';
+      prev.style.display = 'flex';
+      next.style.display = 'flex';
+    } else {
+      vp.style.margin = '0';
+      prev.style.display = 'none';
+      next.style.display = 'none';
+    }
+    offset = 0;
+    inner.style.transition = 'none';
+    inner.style.transform  = 'translateX(0)';
+    // Re-enable transition after reset
+    requestAnimationFrame(() => { inner.style.transition = ''; });
+    updateArrows();
+  }
+
+  function updateArrows() {
+    const { wrap, vp, inner, prev, next } = getEls();
+    if (!wrap) return;
+    const total   = inner.children.length;
+    const vpW     = vp.offsetWidth;
+    const visible = Math.floor(vpW / TILE_W);
+    const canPrev = offset > 0;
+    const canNext = offset < total - visible;
+    prev.style.opacity       = canPrev ? '1' : '0.25';
+    prev.style.pointerEvents = canPrev ? 'auto' : 'none';
+    next.style.opacity       = canNext ? '1' : '0.25';
+    next.style.pointerEvents = canNext ? 'auto' : 'none';
+  }
+
+  window.pageRibbonPrev = function () {
+    const { inner } = getEls();
+    if (!inner) return;
+    offset = Math.max(0, offset - 1);
+    inner.style.transform = `translateX(-${offset * TILE_W}px)`;
+    updateArrows();
+  };
+
+  window.pageRibbonNext = function () {
+    const { vp, inner } = getEls();
+    if (!inner) return;
+    const total   = inner.children.length;
+    const visible = Math.floor(vp.offsetWidth / TILE_W);
+    offset = Math.min(total - visible, offset + 1);
+    inner.style.transform = `translateX(-${offset * TILE_W}px)`;
+    updateArrows();
+  };
+
+  document.addEventListener('DOMContentLoaded', init);
+  window.addEventListener('resize', init);
+})();
 </script>
 
 {# ── New Conversation Modal ── #}

@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026-05-10] - My Conversations: agent tiles become a ribbon on overflow
+- app/templates/agents/list.html: tiles stay full-size (268×303px); overflow:hidden + translateX ribbon with ‹ › arrows activates only when tiles exceed available width
+- app/templates/agents/list.html: arrows hidden when all tiles fit; re-evaluated on window resize
+
 ## [2026-05-10] - Allow sending attachment-only messages (no text required)
 - app/routes/agents.py: removed hard "message is empty" block when attachment_ids are present
 - app/routes/agents.py: skunkBOX receives "[File attached — please review]" placeholder when content is empty
