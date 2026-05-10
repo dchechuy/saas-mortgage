@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-05-10] - New Conversation modal: attachment support
+- app/routes/agents.py: new_conversation() returns JSON when X-Requested-With: XMLHttpRequest so modal can get conv_id before navigating
+- app/templates/agents/list.html: added paperclip button, file input, attachment chips, and async submitNewConv() that creates conv then uploads files
+- app/templates/agents/conversation.html: auto-send IIFE now restores staged modal attachments from sessionStorage before sending the first message
+
 ## [2026-05-09] - Conversation attachments — historical chips & dynamic bubble chips (Phase 5)
 - app/templates/agents/conversation.html: added Jinja2 attachment chips above message text for both user and assistant historical bubbles
 - app/templates/agents/conversation.html: added CSS .attach-chip-history with hover state for download links

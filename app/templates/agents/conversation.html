@@ -606,8 +606,41 @@ function closeRagModal() {
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRagModal(); });
 
-// Auto-send initial question passed via ?q= (from New Conversation modal)
+// Auto-send initial question + attachments passed from New Conversation modal
 (function () {
+  const convId = {{ conv.id }};
+
+  // Restore any attachments staged in the modal before conv existed
+  const attKey    = 'modal_att_' + convId;
+  const attStored = sessionStorage.getItem(attKey);
+  if (attStored) {
+    try {
+      const atts = JSON.parse(attStored);
+      sessionStorage.removeItem(attKey);
+      const chipsArea = document.getElementById('attachment-chips');
+      atts.forEach(att => {
+        pendingAttachments.push(att);
+        const chipId  = 'chip-modal-' + att.attachment_id;
+        const isImage = att.mime_type && att.mime_type.startsWith('image/');
+        const chip    = document.createElement('div');
+        chip.id        = chipId;
+        chip.className = 'attach-chip';
+        chip.innerHTML = isImage
+          ? `<span class="chip-icon"><i class="fa-solid fa-image"></i></span>
+             <span class="chip-name">${truncate(att.original_filename, 20)}</span>
+             <span class="chip-remove" data-id="${att.attachment_id}" title="Remove">×</span>`
+          : `<span class="chip-icon"><i class="fa-solid fa-file-lines"></i></span>
+             <span class="chip-name">${truncate(att.original_filename, 20)}</span>
+             <span class="chip-remove" data-id="${att.attachment_id}" title="Remove">×</span>`;
+        chip.querySelector('.chip-remove').addEventListener('click', () =>
+          removeAttachment(att.attachment_id, chipId));
+        chipsArea.appendChild(chip);
+      });
+      updateChipsVisibility();
+    } catch (_) { /* ignore corrupt storage */ }
+  }
+
+  // Auto-send if an initial question was passed via ?q=
   const params = new URLSearchParams(window.location.search);
   const q = params.get('q');
   if (q) {
@@ -615,6 +648,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRagModa
     document.getElementById('chat-input').value = q;
     autoGrow(document.getElementById('chat-input'));
     sendMessage();
+  } else if (pendingAttachments.length > 0) {
+    // Attachments only (no text) — don't auto-send; let user add a message
   }
 })();
 </script>

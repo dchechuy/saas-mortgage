@@ -476,6 +476,9 @@ async function toggleFavorite(btn) {
                       letter-spacing:0.07em;color:var(--muted);display:block;margin-bottom:10px">
           Your Question
         </label>
+        {# Attachment chips — shown only when files are queued #}
+        <div id="modal-att-chips"
+             style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
         <textarea id="new-conv-question"
                   class="form-control"
                   rows="5"
@@ -486,11 +489,29 @@ async function toggleFavorite(btn) {
 
     {# Footer #}
     <div style="padding:16px 28px 22px;border-top:1px solid var(--border);
-                display:flex;justify-content:flex-end;gap:10px;flex-shrink:0">
-      <button type="button" class="btn btn-secondary" onclick="closeNewConvModal()">Cancel</button>
-      <button type="button" class="btn btn-primary" id="new-conv-submit-btn" onclick="submitNewConv()">
-        Start Conversation →
-      </button>
+                display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      {# Paperclip — left side #}
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" id="modal-attach-btn"
+                title="Attach file"
+                onclick="document.getElementById('modal-file-input').click()"
+                style="background:none;border:none;cursor:pointer;color:var(--muted);
+                       font-size:18px;padding:4px 6px;border-radius:6px;
+                       transition:color 0.15s">
+          <i class="fa-solid fa-paperclip"></i>
+        </button>
+        <input type="file" id="modal-file-input" multiple accept="*/*"
+               style="display:none" onchange="modalHandleFiles(this.files)">
+        <span id="modal-upload-indicator"
+              style="display:none;font-size:12px;color:var(--muted)">Uploading…</span>
+      </div>
+      {# Cancel / Start — right side #}
+      <div style="display:flex;gap:10px">
+        <button type="button" class="btn btn-secondary" onclick="closeNewConvModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="new-conv-submit-btn" onclick="submitNewConv()">
+          Start Conversation →
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -506,48 +527,214 @@ async function toggleFavorite(btn) {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 2px var(--accent);
 }
+#modal-attach-btn:hover { color: var(--accent); }
+.attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 8px;
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+  max-width: 220px;
+}
+.attach-chip img.chip-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.attach-chip .chip-icon { font-size: 18px; color: var(--accent); flex-shrink: 0; }
+.attach-chip .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.attach-chip .chip-remove { cursor: pointer; color: var(--muted); flex-shrink: 0; font-size: 14px; margin-left: 2px; }
+.attach-chip .chip-remove:hover { color: var(--danger-text); }
 </style>
 
 <script>
+/* ── New Conversation Modal ── */
+
+let modalPendingAtts = [];      // [{attachment_id, original_filename, file_category, mime_type, file_size_bytes}]
+let modalUploadsInProgress = 0; // used to block submit while files are still uploading
+
 function openNewConvModal() {
   document.getElementById('new-conv-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
-  // Auto-select if only one agent
-  var tiles = document.querySelectorAll('.new-conv-tile');
+  const tiles = document.querySelectorAll('.new-conv-tile');
   if (tiles.length === 1) selectNewConvAgent(tiles[0]);
-  setTimeout(function() { document.getElementById('new-conv-question').focus(); }, 60);
+  setTimeout(() => document.getElementById('new-conv-question').focus(), 60);
 }
 
 function closeNewConvModal() {
   document.getElementById('new-conv-modal').style.display = 'none';
   document.body.style.overflow = '';
+  // Reset attachment state
+  modalPendingAtts = [];
+  modalUploadsInProgress = 0;
+  document.getElementById('modal-att-chips').innerHTML = '';
+  document.getElementById('modal-att-chips').style.display = 'none';
+  document.getElementById('modal-file-input').value = '';
 }
 
 function selectNewConvAgent(tile) {
-  document.querySelectorAll('.new-conv-tile').forEach(function(t) {
-    t.classList.remove('agent-tile--selected');
-  });
+  document.querySelectorAll('.new-conv-tile').forEach(t => t.classList.remove('agent-tile--selected'));
   tile.classList.add('agent-tile--selected');
   document.getElementById('new-conv-agent-id').value = tile.dataset.agentId;
   document.getElementById('new-conv-question').focus();
 }
 
-function submitNewConv() {
-  var agentId  = document.getElementById('new-conv-agent-id').value;
-  var question = document.getElementById('new-conv-question').value.trim();
-  if (!agentId) {
-    alert('Please select an agent first.');
-    return;
-  }
-  document.getElementById('new-conv-initial-msg').value = question;
-  document.getElementById('new-conv-submit-btn').disabled = true;
-  document.getElementById('new-conv-submit-btn').textContent = 'Starting…';
-  document.getElementById('new-conv-form').submit();
+/* ── Attachment helpers ── */
+
+function modalTruncate(str, n) {
+  return str.length > n ? str.slice(0, n - 1) + '…' : str;
 }
 
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeNewConvModal();
-});
+function modalUpdateChips() {
+  const area = document.getElementById('modal-att-chips');
+  area.style.display = (area.children.length > 0) ? 'flex' : 'none';
+}
+
+function modalRemoveAtt(attachmentId, chipId) {
+  modalPendingAtts = modalPendingAtts.filter(a => a.attachment_id !== attachmentId);
+  const chip = document.getElementById(chipId);
+  if (chip) chip.remove();
+  modalUpdateChips();
+}
+
+function modalHandleFiles(files) {
+  const MAX = 5;
+  if (modalPendingAtts.length + files.length > MAX) {
+    alert('You can attach up to 5 files per message.');
+    document.getElementById('modal-file-input').value = '';
+    return;
+  }
+  Array.from(files).forEach(file => modalUploadFile(file));
+  document.getElementById('modal-file-input').value = '';
+}
+
+function modalUploadFile(file) {
+  // We don't have a conv_id yet — stage the file info locally and upload after conv is created.
+  // Store the raw File object in modalPendingAtts with a temp id.
+  const tempId  = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const chipId  = 'mchip-' + tempId;
+  const isImage = file.type.startsWith('image/');
+
+  // Add a "pending" chip
+  const chip = document.createElement('div');
+  chip.id        = chipId;
+  chip.className = 'attach-chip';
+  chip.innerHTML = `
+    <span class="chip-icon"><i class="fa-solid fa-spinner fa-spin"></i></span>
+    <span class="chip-name">${modalTruncate(file.name, 20)}</span>
+  `;
+  document.getElementById('modal-att-chips').appendChild(chip);
+  modalUpdateChips();
+
+  // Stage locally (actual upload happens after conv is created)
+  modalPendingAtts.push({ _tempId: tempId, _chipId: chipId, _file: file,
+                          original_filename: file.name, mime_type: file.type,
+                          file_size_bytes: file.size });
+
+  // Update chip to show ready (no server upload yet)
+  if (isImage) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      chip.innerHTML = `
+        <img class="chip-thumb" src="${e.target.result}" alt="">
+        <span class="chip-name">${modalTruncate(file.name, 20)}</span>
+        <span class="chip-remove" title="Remove">×</span>
+      `;
+      chip.querySelector('.chip-remove').addEventListener('click', () => {
+        modalPendingAtts = modalPendingAtts.filter(a => a._tempId !== tempId);
+        chip.remove();
+        modalUpdateChips();
+      });
+    };
+    reader.readAsDataURL(file);
+  } else {
+    chip.innerHTML = `
+      <span class="chip-icon"><i class="fa-solid fa-file-lines"></i></span>
+      <span class="chip-name">${modalTruncate(file.name, 20)}</span>
+      <span class="chip-remove" title="Remove">×</span>
+    `;
+    chip.querySelector('.chip-remove').addEventListener('click', () => {
+      modalPendingAtts = modalPendingAtts.filter(a => a._tempId !== tempId);
+      chip.remove();
+      modalUpdateChips();
+    });
+  }
+}
+
+/* ── Submit ── */
+
+async function submitNewConv() {
+  const agentId  = document.getElementById('new-conv-agent-id').value;
+  const question = document.getElementById('new-conv-question').value.trim();
+  if (!agentId) { alert('Please select an agent first.'); return; }
+
+  const btn = document.getElementById('new-conv-submit-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Starting…';
+
+  try {
+    // 1. Create the conversation
+    const formData = new FormData();
+    formData.append('agent_id',       agentId);
+    formData.append('initial_message', question);
+
+    const createRes = await fetch('{{ url_for("agents.new_conversation") }}', {
+      method:  'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body:    formData,
+    });
+    const createData = await createRes.json();
+    if (!createData.ok) throw new Error(createData.error || 'Failed to create conversation.');
+
+    const convId      = createData.conv_id;
+    const redirectUrl = createData.redirect_url;
+
+    // 2. Upload any staged attachments to the new conversation
+    if (modalPendingAtts.length > 0) {
+      btn.textContent = 'Uploading…';
+      const uploadedMeta = [];
+
+      for (const att of modalPendingAtts) {
+        try {
+          const fd = new FormData();
+          fd.append('file', att._file);
+          const upRes  = await fetch(`/agents/${convId}/attachments`, { method: 'POST', body: fd });
+          const upData = await upRes.json();
+          if (upData.ok) {
+            uploadedMeta.push({
+              attachment_id:     upData.attachment_id,
+              original_filename: upData.original_filename,
+              file_category:     upData.file_category,
+              mime_type:         upData.mime_type,
+              file_size_bytes:   upData.file_size_bytes,
+            });
+          }
+        } catch (_) { /* skip failed uploads */ }
+      }
+
+      // 3. Stash metadata so conversation.html can auto-include them in the first message
+      if (uploadedMeta.length > 0) {
+        sessionStorage.setItem('modal_att_' + convId, JSON.stringify(uploadedMeta));
+      }
+    }
+
+    // 4. Navigate to the conversation
+    window.location.href = redirectUrl;
+
+  } catch (err) {
+    btn.disabled    = false;
+    btn.textContent = 'Start Conversation →';
+    alert('Could not start conversation: ' + err.message);
+  }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeNewConvModal(); });
 </script>
 {% endif %}
 

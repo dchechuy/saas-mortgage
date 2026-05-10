@@ -282,7 +282,14 @@ def new_conversation():
     kwargs = {"conversation_id": conv.id}
     if initial_message:
         kwargs["q"] = initial_message
-    return redirect(url_for("agents.view_conversation", **kwargs))
+    redirect_url = url_for("agents.view_conversation", **kwargs)
+
+    # AJAX callers (New Conversation modal) get JSON so they can upload
+    # attachments to the new conv before navigating.
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"ok": True, "conv_id": conv.id, "redirect_url": redirect_url})
+
+    return redirect(redirect_url)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
