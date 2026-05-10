@@ -364,12 +364,14 @@ def send_message(conversation_id):
 
     data = request.get_json(force=True) or {}
     content = (data.get("message") or "").strip()
-    if not content:
-        return jsonify({"ok": False, "error": "Message is empty."}), 400
 
     raw_att_ids     = data.get("attachment_ids") or []
     attachment_ids  = [int(x) for x in raw_att_ids if str(x).isdigit()][:5]
     attachment_meta = data.get("attachment_metadata") or []  # list of dicts from frontend
+
+    # Must have text OR at least one attachment
+    if not content and not attachment_ids:
+        return jsonify({"ok": False, "error": "Message is empty."}), 400
 
     agent = conv.agent
     if not agent or not agent.is_active:
@@ -383,18 +385,24 @@ def send_message(conversation_id):
     )
     db.session.add(user_msg)
 
-    # Auto-title the conversation from the first user message
+    # Auto-title: use text, or first attachment filename, or fallback
     if not conv.title or conv.title == f"Conversation with {agent.name}":
-        conv.title = content[:80]
+        if content:
+            conv.title = content[:80]
+        elif attachment_meta:
+            conv.title = attachment_meta[0].get("original_filename", "File attached")[:80]
+        else:
+            conv.title = "File attached"
 
     db.session.commit()
 
-    # Call skunkBOX
+    # Call skunkBOX — use placeholder when user sent attachment-only (no text)
+    skunkbox_message = content or "[File attached — please review]"
     try:
         result = _call_skunkbox(
             integration=agent.integration,
             skunkbox_agent_id=agent.skunkbox_agent_id,
-            message=content,
+            message=skunkbox_message,
             session_id=conv.skunkbox_session_id,
             user_full_name=current_user.display_name or current_user.username,
             username=current_user.username,

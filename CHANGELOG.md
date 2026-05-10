@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-05-10] - Allow sending attachment-only messages (no text required)
+- app/routes/agents.py: removed hard "message is empty" block when attachment_ids are present
+- app/routes/agents.py: skunkBOX receives "[File attached — please review]" placeholder when content is empty
+- app/routes/agents.py: conversation auto-title falls back to attachment filename when no text
+
 ## [2026-05-10] - New Conversation modal: ribbon picker, wider, auto-select
 - app/templates/agents/list.html: modal is 25% wider (780→975px)
 - app/templates/agents/list.html: agent picker replaced with horizontal ribbon with left/right arrows; agents already sorted by last-use from route
