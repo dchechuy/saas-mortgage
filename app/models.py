@@ -319,6 +319,19 @@ class FeatureFlag(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, onupdate=datetime.utcnow)
 
 
+class DocPrompt(db.Model):
+    """Editable prompts used by the help-document generator."""
+    __tablename__ = "doc_prompt"
+
+    id          = db.Column(db.Integer, primary_key=True)
+    key         = db.Column(db.String(40), unique=True, nullable=False)
+    label       = db.Column(db.String(120), nullable=False)
+    prompt_text = db.Column(db.Text, nullable=False)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at  = db.Column(db.DateTime, default=datetime.utcnow,
+                            onupdate=datetime.utcnow, nullable=False)
+
+
 def next_version(release_type: str, latest: ReleaseNote | None) -> tuple[int, int, int]:
     if latest is None:
         return (1, 0, 0)

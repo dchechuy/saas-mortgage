@@ -10,6 +10,7 @@ from flask import (Blueprint, abort, current_app, flash, jsonify,
 from flask_login import current_user, login_required
 
 from ..access import permission_required
+from ..activity_logger import log_activity
 from ..extensions import db
 from ..models import ReleaseNote, next_version
 from ..release_manager import COLOR_HEX
@@ -406,6 +407,128 @@ def architecture():
         gen_running=_gen_status["running"],
         breadcrumbs=_system_overview_crumbs("architecture"),
     )
+
+
+@help_bp.route("/improve/<doc_key>", methods=["POST"])
+@login_required
+@permission_required("help", "edit")
+def improve_doc_prompt(doc_key):
+    """AJAX: AI rewrites a doc-generation prompt based on a plain-English instruction."""
+    from ..models import DocPrompt, LlmModel
+    from ..doc_generator import DEFAULT_PROMPTS, _call_llm
+    import json as _json
+
+    valid_keys = {"quick_start", "user_manual", "architecture"}
+    if doc_key not in valid_keys:
+        return jsonify({"ok": False, "error": "Invalid document key"}), 400
+
+    data = request.get_json(silent=True) or {}
+    instruction = (data.get("instruction") or "").strip()
+    if not instruction:
+        return jsonify({"ok": False, "error": "Instruction cannot be empty"}), 400
+
+    # Load current prompt
+    row = DocPrompt.query.filter_by(key=doc_key).first()
+    current_prompt = row.prompt_text if row else DEFAULT_PROMPTS[doc_key]["text"]
+
+    # Pick the active LLM model
+    llm_model = (
+        LlmModel.query.filter_by(is_default=True, is_active=True).first()
+        or LlmModel.query.filter_by(is_active=True).first()
+    )
+    if not llm_model:
+        return jsonify({"ok": False, "error": "No active AI model configured"}), 500
+
+    meta_prompt = (
+        "You are a prompt engineer. Below is the current prompt used to generate a help document.\n"
+        "A user has requested the following improvement:\n\n"
+        f'"{instruction}"\n\n'
+        "Current prompt:\n"
+        "---\n"
+        f"{current_prompt}\n"
+        "---\n\n"
+        "Return a JSON object with exactly two keys:\n"
+        '  "updated_prompt": the full rewritten prompt text incorporating the request\n'
+        '  "summary": one short paragraph (2-3 sentences) describing what you changed and why,\n'
+        "             written directly to the user in plain English\n\n"
+        "Return only valid JSON. No markdown fences, no extra text."
+    )
+
+    try:
+        raw = _call_llm(meta_prompt, llm_model, user_id=current_user.id)
+        # Strip markdown fences if the model added them anyway
+        raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        result = _json.loads(raw)
+        updated_prompt = result.get("updated_prompt", "").strip()
+        summary = result.get("summary", "").strip()
+        if not updated_prompt:
+            raise ValueError("LLM returned empty updated_prompt")
+    except Exception as exc:
+        log.error("improve_doc_prompt failed for '%s': %s", doc_key, exc)
+        return jsonify({"ok": False, "error": f"AI call failed: {exc}"}), 500
+
+    return jsonify({
+        "ok": True,
+        "doc_key": doc_key,
+        "updated_prompt": updated_prompt,
+        "summary": summary,
+    })
+
+
+@help_bp.route("/improve/<doc_key>/apply", methods=["POST"])
+@login_required
+@permission_required("help", "edit")
+def apply_improved_prompt(doc_key):
+    """Save the AI-rewritten prompt and optionally kick off regeneration."""
+    from ..models import DocPrompt
+    from ..doc_generator import DEFAULT_PROMPTS
+
+    valid_keys = {"quick_start", "user_manual", "architecture"}
+    if doc_key not in valid_keys:
+        return jsonify({"ok": False, "error": "Invalid document key"}), 400
+
+    data = request.get_json(silent=True) or {}
+    updated_prompt = (data.get("updated_prompt") or "").strip()
+    regenerate = bool(data.get("regenerate", False))
+
+    if not updated_prompt:
+        return jsonify({"ok": False, "error": "Updated prompt cannot be empty"}), 400
+
+    label = DEFAULT_PROMPTS.get(doc_key, {}).get("label", doc_key)
+    row = DocPrompt.query.filter_by(key=doc_key).first()
+    if row:
+        row.prompt_text = updated_prompt
+    else:
+        db.session.add(DocPrompt(key=doc_key, label=label, prompt_text=updated_prompt))
+    db.session.commit()
+    log_activity(current_user, "doc_prompt.improved", page="Help")
+
+    if regenerate:
+        if _gen_status["running"]:
+            return jsonify({"ok": True, "saved": True, "regenerating": False,
+                            "warning": "Regeneration already in progress"}), 200
+
+        _gen_status.update({"running": True, "doc": doc_key, "results": None, "error": None})
+        app_obj = current_app._get_current_object()
+        user_id = current_user.id
+
+        def _run():
+            with app_obj.app_context():
+                try:
+                    from ..doc_generator import regenerate_docs
+                    results = regenerate_docs([doc_key], user_id)
+                    _gen_status["results"] = results
+                except Exception as exc:
+                    log.error("Regen after improve failed: %s", exc)
+                    _gen_status["error"] = str(exc)
+                finally:
+                    _gen_status["running"] = False
+
+        import threading
+        threading.Thread(target=_run, daemon=True).start()
+        return jsonify({"ok": True, "saved": True, "regenerating": True})
+
+    return jsonify({"ok": True, "saved": True, "regenerating": False})
 
 
 @help_bp.route("/dependencies")

@@ -22,7 +22,7 @@ def create_app() -> Flask:
     login_manager.init_app(app)
 
     from .models import (AiAgent, AgentConversation, AgentMessage,  # noqa: F401
-                          Attribute, FeatureFlag, Integration, LlmModel,
+                          Attribute, DocPrompt, FeatureFlag, Integration, LlmModel,
                           LlmRequestLog, UserActivityLog, ApiRequestLog,
                           NavItem, NavSection,
                           Permission, ReleaseNote, Role, User)
@@ -121,7 +121,7 @@ def create_app() -> Flask:
 def _seed_defaults() -> None:
     from sqlalchemy import inspect as sa_inspect
 
-    from .models import Attribute, FeatureFlag, Integration, NavItem, NavSection, Permission, Role, User
+    from .models import Attribute, DocPrompt, FeatureFlag, Integration, NavItem, NavSection, Permission, Role, User
 
     inspector = sa_inspect(db.engine)
     if not inspector.has_table("user"):
@@ -136,6 +136,8 @@ def _seed_defaults() -> None:
     if not inspector.has_table("feature_flag"):
         return
     if not inspector.has_table("nav_section"):
+        return
+    if not inspector.has_table("doc_prompt"):
         return
 
     admin_role = Role.query.filter_by(name="admin").first()
@@ -204,5 +206,10 @@ def _seed_defaults() -> None:
 
     # Nav sections are seeded via migration h8i9j0k1l2m3, not at startup.
     # Seeding here caused a race condition with multiple gunicorn workers.
+
+    from .doc_generator import DEFAULT_PROMPTS
+    for key, meta in DEFAULT_PROMPTS.items():
+        if not DocPrompt.query.filter_by(key=key).first():
+            db.session.add(DocPrompt(key=key, label=meta["label"], prompt_text=meta["text"]))
 
     db.session.commit()

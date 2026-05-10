@@ -8,6 +8,14 @@
     <i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Generating…
   </button>
   {% else %}
+  {% if doc_name in ('quick_start', 'user_manual', 'architecture') %}
+  <button class="btn btn-secondary btn-sm"
+          id="improve-btn"
+          data-doc-key="{{ doc_name }}"
+          onclick="openImproveModal()">
+    Improve this doc
+  </button>
+  {% endif %}
   <button class="btn btn-sm" id="regenBtn"
           onclick="startRegen('{{ doc_name }}')"
           style="background:var(--panel-muted);border:1px solid var(--border);
@@ -143,6 +151,158 @@
   _polling = setInterval(pollStatus, 2500);
   {% endif %}
 })();
+</script>
+{% endif %}
+
+{% if current_user.role == 'admin' and doc_name in ('quick_start', 'user_manual', 'architecture') %}
+<div id="improve-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);
+     align-items:center;justify-content:center;z-index:1060;padding:24px"
+     onclick="if(event.target===this)closeImproveModal()">
+  <div style="background:var(--panel);border-radius:12px;width:100%;max-width:560px;
+              box-shadow:0 8px 40px rgba(0,0,0,0.25)" onclick="event.stopPropagation()">
+
+    <!-- Step 1: Enter instruction -->
+    <div id="improve-step-1">
+      <div style="padding:22px 28px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <h3 style="margin:0;font-size:15px;font-weight:700">Improve This Document</h3>
+        <button onclick="closeImproveModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted)">✕</button>
+      </div>
+      <div style="padding:20px 28px">
+        <p style="margin-bottom:12px;color:var(--muted);font-size:13px">
+          Describe what you'd like to change. The AI will rewrite the generation
+          prompt and show you exactly what it did before you commit.
+        </p>
+        <textarea id="improve-instruction"
+                  rows="4"
+                  class="form-control"
+                  placeholder='e.g. "Split into numbered sections. Start with Conversations."'
+                  style="width:100%"></textarea>
+        <p id="improve-error" style="color:var(--danger,#dc2626);font-size:13px;margin-top:8px;display:none"></p>
+      </div>
+      <div style="padding:14px 28px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="closeImproveModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="improve-submit-btn" onclick="submitImprovement()">
+          Ask AI to Improve
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Review changes -->
+    <div id="improve-step-2" style="display:none">
+      <div style="padding:22px 28px 16px;border-bottom:1px solid var(--border)">
+        <h3 style="margin:0;font-size:15px;font-weight:700">Review Changes</h3>
+      </div>
+      <div style="padding:20px 28px">
+        <p style="font-weight:600;margin-bottom:8px;font-size:13px">What the AI changed:</p>
+        <p id="improve-summary"
+           style="background:var(--panel-muted);border-radius:6px;
+                  padding:12px;font-size:13px;line-height:1.5;
+                  color:var(--text);margin-bottom:14px"></p>
+        <details>
+          <summary style="cursor:pointer;font-size:12px;color:var(--muted)">View updated prompt</summary>
+          <pre id="improve-updated-prompt"
+               style="font-size:11px;background:var(--panel-muted);
+                      border-radius:6px;padding:12px;margin-top:8px;
+                      white-space:pre-wrap;word-break:break-word;
+                      max-height:200px;overflow-y:auto"></pre>
+        </details>
+      </div>
+      <div style="padding:14px 28px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="closeImproveModal()">Cancel</button>
+        <button class="btn btn-secondary btn-sm" onclick="applyImprovement(false)">Save Prompt Only</button>
+        <button class="btn btn-primary btn-sm" onclick="applyImprovement(true)">Save &amp; Regenerate</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Applying -->
+    <div id="improve-step-3" style="display:none">
+      <div style="padding:48px 28px;text-align:center">
+        <i class="fas fa-spinner fa-spin" style="font-size:24px;color:var(--accent);margin-bottom:12px"></i>
+        <p id="improve-applying-msg" style="color:var(--muted);font-size:13px">Saving prompt…</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const DOC_KEY = "{{ doc_name }}";
+let _updatedPrompt = "";
+
+function openImproveModal() {
+  document.getElementById("improve-modal").style.display = "flex";
+  document.getElementById("improve-step-1").style.display = "block";
+  document.getElementById("improve-step-2").style.display = "none";
+  document.getElementById("improve-step-3").style.display = "none";
+  document.getElementById("improve-instruction").value = "";
+  document.getElementById("improve-error").style.display = "none";
+  document.getElementById("improve-instruction").focus();
+}
+
+function closeImproveModal() {
+  document.getElementById("improve-modal").style.display = "none";
+}
+
+async function submitImprovement() {
+  const instruction = document.getElementById("improve-instruction").value.trim();
+  const errEl = document.getElementById("improve-error");
+  if (!instruction) {
+    errEl.textContent = "Please describe what you'd like to change.";
+    errEl.style.display = "block";
+    return;
+  }
+  errEl.style.display = "none";
+  const btn = document.getElementById("improve-submit-btn");
+  btn.disabled = true;
+  btn.textContent = "Thinking…";
+
+  try {
+    const resp = await fetch(`/help/improve/${DOC_KEY}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({instruction}),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || "Unknown error");
+
+    _updatedPrompt = data.updated_prompt;
+    document.getElementById("improve-summary").textContent = data.summary;
+    document.getElementById("improve-updated-prompt").textContent = data.updated_prompt;
+
+    document.getElementById("improve-step-1").style.display = "none";
+    document.getElementById("improve-step-2").style.display = "block";
+  } catch (err) {
+    errEl.textContent = "Error: " + err.message;
+    errEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Ask AI to Improve";
+  }
+}
+
+async function applyImprovement(regenerate) {
+  document.getElementById("improve-step-2").style.display = "none";
+  document.getElementById("improve-step-3").style.display = "block";
+  document.getElementById("improve-applying-msg").textContent =
+    regenerate ? "Saving prompt and starting regeneration…" : "Saving prompt…";
+
+  try {
+    const resp = await fetch(`/help/improve/${DOC_KEY}/apply`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({updated_prompt: _updatedPrompt, regenerate}),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || "Unknown error");
+
+    closeImproveModal();
+    if (regenerate && data.regenerating) {
+      setTimeout(() => window.location.reload(), 800);
+    }
+  } catch (err) {
+    document.getElementById("improve-applying-msg").textContent = "Error: " + err.message;
+  }
+}
 </script>
 {% endif %}
 

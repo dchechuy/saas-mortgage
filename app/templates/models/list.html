@@ -5,7 +5,7 @@
 {% block content %}
 
 {# ── Top-level section tab strip ── #}
-{% set tab_count = (1 if can_view_agents else 0) + (1 if can_view_models else 0) + (1 if can_view_integrations else 0) + (1 if can_view_attributes else 0) + (1 if can_view_flags else 0) + 1 %}
+{% set tab_count = (1 if can_view_agents else 0) + (1 if can_view_models else 0) + (1 if can_view_integrations else 0) + (1 if can_view_attributes else 0) + (1 if can_view_flags else 0) + 2 %}
 {% if tab_count > 1 %}
 <div class="tax-tabs" style="margin-bottom:24px">
   {% if can_view_agents %}
@@ -30,6 +30,8 @@
   {% endif %}
   <button class="tax-tab" id="top-tab-btn-sections" type="button"
           onclick="switchTopTab('sections')">Sections</button>
+  <button class="tax-tab" id="top-tab-btn-help-prompts" type="button"
+          onclick="switchTopTab('help-prompts')">Help Prompts</button>
 </div>
 {% endif %}
 
@@ -1183,10 +1185,61 @@ async function secSaveAll() {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') secCloseEdit(); });
 </script>
 
+{# ── Help Prompts tab panel ── #}
+<div id="config-tab-help-prompts" style="display:none">
+  <div class="sb-page-header">
+    <div>
+      <h1 class="page-title">Help Prompts</h1>
+      <p style="color:var(--muted);font-size:13px;margin:4px 0 0">
+        These prompts control what the AI writes when you regenerate Quick Start,
+        User Manual, and Architecture documents. Edit any prompt, save, then
+        regenerate the document from the User Guides section.
+        The System Prompt applies to all three.
+      </p>
+    </div>
+  </div>
+
+  {% set prompt_map = namespace(data={}) %}
+  {% for p in doc_prompts %}{% set _ = prompt_map.data.update({p.key: p}) %}{% endfor %}
+
+  {% for key, meta in default_prompts.items() %}
+    {% set current = prompt_map.data.get(key) %}
+    {% set current_text = current.prompt_text if current else meta.text %}
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 style="margin:0;font-size:15px;font-weight:600">{{ meta.label }}</h3>
+          {% if current %}
+          <span style="font-size:11px;color:var(--muted)">
+            Updated <span class="local-time" data-utc="{{ current.updated_at.isoformat() }}" data-format="date">
+              {{ current.updated_at.strftime('%Y-%m-%d') }}
+            </span>
+          </span>
+          {% endif %}
+        </div>
+        <form method="POST" action="{{ url_for('models.save_doc_prompt', key=key) }}">
+          <textarea name="prompt_text" rows="10"
+                    class="form-control"
+                    style="font-family:monospace;font-size:0.82rem;width:100%">{{ current_text }}</textarea>
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          </form>
+          <form method="POST"
+                action="{{ url_for('models.reset_doc_prompt', key=key) }}"
+                style="margin:0"
+                onsubmit="return confirm('Reset to default? This will overwrite your current text.');">
+            <button type="submit" class="btn btn-secondary btn-sm">Reset to Default</button>
+          </form>
+          </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
 <script>
-const _TOP_SECTIONS   = ['agents', 'llm', 'apis', 'attributes', 'flags', 'sections'];
-const _TOP_HASH_MAP   = { agents: '#agents', llm: '#integrations', apis: '#apis', attributes: '#attributes', flags: '#flags', sections: '#sections' };
-const _TOP_LABEL_MAP  = { agents: 'AI Agents Config', llm: 'LLM Models', apis: 'External APIs', attributes: 'Attributes', flags: 'Feature Flags', sections: 'Sections' };
+const _TOP_SECTIONS   = ['agents', 'llm', 'apis', 'attributes', 'flags', 'sections', 'help-prompts'];
+const _TOP_HASH_MAP   = { agents: '#agents', llm: '#integrations', apis: '#apis', attributes: '#attributes', flags: '#flags', sections: '#sections', 'help-prompts': '#help-prompts' };
+const _TOP_LABEL_MAP  = { agents: 'AI Agents Config', llm: 'LLM Models', apis: 'External APIs', attributes: 'Attributes', flags: 'Feature Flags', sections: 'Sections', 'help-prompts': 'Help Prompts' };
 
 function switchTopTab(section) {
   _TOP_SECTIONS.forEach(s => {
@@ -1205,7 +1258,7 @@ function applyHash() {
   const hash = window.location.hash;
 
   // Map hash → section id
-  const hashToSection = { '#agents': 'agents', '#integrations': 'llm', '#apis': 'apis', '#attributes': 'attributes', '#flags': 'flags', '#sections': 'sections' };
+  const hashToSection = { '#agents': 'agents', '#integrations': 'llm', '#apis': 'apis', '#attributes': 'attributes', '#flags': 'flags', '#sections': 'sections', '#help-prompts': 'help-prompts' };
   let activeSection = hashToSection[hash];
 
   // Default to first rendered tab when no matching hash

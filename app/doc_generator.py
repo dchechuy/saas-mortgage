@@ -33,11 +33,105 @@ _ROUTE_FILES = [
 # docs/ directory (two levels up from this file's package)
 _DOCS_DIR = Path(__file__).resolve().parents[1] / "docs"
 
-_SYSTEM_PROMPT = (
-    "You are a technical writer creating user documentation for a SaaS platform. "
-    "Write clear, friendly documentation that a non-technical user can follow. "
-    "Use markdown formatting with headers, numbered steps, and bullet points."
-)
+DEFAULT_PROMPTS = {
+    "system": {
+        "label": "System Prompt",
+        "text": (
+            "You are a technical writer creating user documentation for a SaaS platform. "
+            "Write clear, friendly documentation that a non-technical user can follow. "
+            "Use markdown formatting with headers, numbered steps, and bullet points."
+        ),
+    },
+    "quick_start": {
+        "label": "Quick Start Guide",
+        "text": (
+            "Based on these Flask route files, generate a Quick Start Guide for this SaaS platform.\n"
+            "The platform is an internal tool that lets team members chat with AI agents, "
+            "browse a Learning Center of documents, and manage configurations.\n\n"
+            "The guide should:\n"
+            "1. Start with a one-paragraph overview of what the platform is and who it's for\n"
+            "2. List prerequisites (having login credentials)\n"
+            "3. Provide 5-7 numbered steps to get started fast:\n"
+            "   - Log in with your credentials\n"
+            "   - Navigate the dashboard\n"
+            "   - Start a conversation with an AI Agent\n"
+            "   - Browse the Learning Center\n"
+            "   - View your activity in Reporting\n"
+            "4. End with a 'What\\'s next?' section pointing to the User Manual\n\n"
+            "Format as clean markdown with a top-level # heading. Keep it under 600 words."
+        ),
+    },
+    "user_manual": {
+        "label": "User Manual",
+        "text": (
+            "Based on these Flask route files, generate a comprehensive User Manual "
+            "for this SaaS platform.\n\n"
+            "Structure it with a top-level # heading followed by sections:\n\n"
+            "## Overview\n"
+            "Brief description of the platform and its purpose.\n\n"
+            "## Sections\n"
+            "For each major section of the app, write:\n"
+            "### [Section Name]\n"
+            "**Purpose:** What this section does\n"
+            "**Who can use it:** All users / Admin only\n"
+            "**How to use it:** Step-by-step instructions\n"
+            "**Key features:** Bullet list of capabilities\n\n"
+            "Cover these sections in order:\n"
+            "1. Dashboard\n"
+            "2. AI Agents — Conversations (chat with AI agents, view message history)\n"
+            "3. AI Agents — Learning Center (browse and preview documents)\n"
+            "4. Reporting (activity logs, usage metrics)\n"
+            "5. System Config — Users (manage team accounts)\n"
+            "6. System Config — Roles & Permissions (access control)\n"
+            "7. System Config — Models (AI model configuration)\n"
+            "8. System Config — Integrations (external service connections)\n"
+            "9. System Config — AI Agents (configure agent personas)\n"
+            "10. System Config — Feature Flags (toggle platform features)\n"
+            "11. User Guides / Help\n\n"
+            "Format as clean markdown. Be thorough but concise."
+        ),
+    },
+    "architecture": {
+        "label": "Architecture Overview",
+        "text": (
+            "Based on these Flask route files, generate an Architecture Overview "
+            "for this SaaS platform.\n\n"
+            "Structure it with a top-level # heading followed by:\n\n"
+            "## System Overview\n"
+            "What the platform is built with and why.\n\n"
+            "## Technology Stack\n"
+            "A markdown table: Layer | Technology | Purpose\n"
+            "Rows: Frontend, Backend, Database, Authentication, AI Integration, Web Server\n\n"
+            "## Application Structure\n"
+            "Describe the main components:\n"
+            "- Flask blueprints and what each handles\n"
+            "- SQLite database and key models\n"
+            "- Integration with skunkBOX (external AI platform) via REST API\n"
+            "- Role-based access control pattern\n\n"
+            "## Request Flow\n"
+            "Describe the flow: User → NGINX → Gunicorn → Flask blueprint → DB/API\n\n"
+            "## Key Concepts\n"
+            "Explain in plain English:\n"
+            "- How AI Agents work (proxy to skunkBOX personas)\n"
+            "- How Learning Center documents are served (proxy from skunkBOX)\n"
+            "- How RAG sources are surfaced in conversations\n"
+            "- How feature flags gate functionality\n\n"
+            "Format as clean markdown."
+        ),
+    },
+}
+
+
+def _get_doc_prompt(key: str) -> str:
+    """Load prompt text from DB; fall back to DEFAULT_PROMPTS if not found."""
+    try:
+        from .models import DocPrompt
+        row = DocPrompt.query.filter_by(key=key).first()
+        if row:
+            return row.prompt_text
+    except Exception as exc:
+        log.warning("Could not load DocPrompt '%s' from DB: %s", key, exc)
+    return DEFAULT_PROMPTS[key]["text"]
 
 
 # ── Source reading ────────────────────────────────────────────────
@@ -112,7 +206,7 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
             json={
                 "model": llm_model.deployment_name,
                 "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": _get_doc_prompt("system")},
                     {"role": "user",   "content": prompt},
                 ],
                 "max_completion_tokens": 4000,
@@ -145,89 +239,21 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
 def generate_quick_start(route_summaries: dict, llm_model: LlmModel,
                           user_id: int = None) -> str:
     routes_text = _format_routes(route_summaries)
-    prompt = (
-        "Based on these Flask route files, generate a Quick Start Guide for this SaaS platform.\n"
-        "The platform is an internal tool that lets team members chat with AI agents, "
-        "browse a Learning Center of documents, and manage configurations.\n\n"
-        "The guide should:\n"
-        "1. Start with a one-paragraph overview of what the platform is and who it's for\n"
-        "2. List prerequisites (having login credentials)\n"
-        "3. Provide 5-7 numbered steps to get started fast:\n"
-        "   - Log in with your credentials\n"
-        "   - Navigate the dashboard\n"
-        "   - Start a conversation with an AI Agent\n"
-        "   - Browse the Learning Center\n"
-        "   - View your activity in Reporting\n"
-        "4. End with a 'What\\'s next?' section pointing to the User Manual\n\n"
-        "Format as clean markdown with a top-level # heading. Keep it under 600 words.\n\n"
-        f"Route files for context:\n{routes_text}"
-    )
+    prompt = _get_doc_prompt("quick_start") + f"\n\nRoute files for context:\n{routes_text}"
     return _call_llm(prompt, llm_model, user_id=user_id)
 
 
 def generate_user_manual(route_summaries: dict, llm_model: LlmModel,
                           user_id: int = None) -> str:
     routes_text = _format_routes(route_summaries)
-    prompt = (
-        "Based on these Flask route files, generate a comprehensive User Manual "
-        "for this SaaS platform.\n\n"
-        "Structure it with a top-level # heading followed by sections:\n\n"
-        "## Overview\n"
-        "Brief description of the platform and its purpose.\n\n"
-        "## Sections\n"
-        "For each major section of the app, write:\n"
-        "### [Section Name]\n"
-        "**Purpose:** What this section does\n"
-        "**Who can use it:** All users / Admin only\n"
-        "**How to use it:** Step-by-step instructions\n"
-        "**Key features:** Bullet list of capabilities\n\n"
-        "Cover these sections in order:\n"
-        "1. Dashboard\n"
-        "2. AI Agents — Conversations (chat with AI agents, view message history)\n"
-        "3. AI Agents — Learning Center (browse and preview documents)\n"
-        "4. Reporting (activity logs, usage metrics)\n"
-        "5. System Config — Users (manage team accounts)\n"
-        "6. System Config — Roles & Permissions (access control)\n"
-        "7. System Config — Models (AI model configuration)\n"
-        "8. System Config — Integrations (external service connections)\n"
-        "9. System Config — AI Agents (configure agent personas)\n"
-        "10. System Config — Feature Flags (toggle platform features)\n"
-        "11. User Guides / Help\n\n"
-        "Format as clean markdown. Be thorough but concise.\n\n"
-        f"Route files for context:\n{routes_text}"
-    )
+    prompt = _get_doc_prompt("user_manual") + f"\n\nRoute files for context:\n{routes_text}"
     return _call_llm(prompt, llm_model, user_id=user_id)
 
 
 def generate_architecture(route_summaries: dict, llm_model: LlmModel,
                            user_id: int = None) -> str:
     routes_text = _format_routes(route_summaries)
-    prompt = (
-        "Based on these Flask route files, generate an Architecture Overview "
-        "for this SaaS platform.\n\n"
-        "Structure it with a top-level # heading followed by:\n\n"
-        "## System Overview\n"
-        "What the platform is built with and why.\n\n"
-        "## Technology Stack\n"
-        "A markdown table: Layer | Technology | Purpose\n"
-        "Rows: Frontend, Backend, Database, Authentication, AI Integration, Web Server\n\n"
-        "## Application Structure\n"
-        "Describe the main components:\n"
-        "- Flask blueprints and what each handles\n"
-        "- SQLite database and key models\n"
-        "- Integration with skunkBOX (external AI platform) via REST API\n"
-        "- Role-based access control pattern\n\n"
-        "## Request Flow\n"
-        "Describe the flow: User → NGINX → Gunicorn → Flask blueprint → DB/API\n\n"
-        "## Key Concepts\n"
-        "Explain in plain English:\n"
-        "- How AI Agents work (proxy to skunkBOX personas)\n"
-        "- How Learning Center documents are served (proxy from skunkBOX)\n"
-        "- How RAG sources are surfaced in conversations\n"
-        "- How feature flags gate functionality\n\n"
-        "Format as clean markdown.\n\n"
-        f"Route files for context:\n{routes_text}"
-    )
+    prompt = _get_doc_prompt("architecture") + f"\n\nRoute files for context:\n{routes_text}"
     return _call_llm(prompt, llm_model, user_id=user_id)
 
 

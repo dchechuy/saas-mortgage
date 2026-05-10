@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-05-10] - Doc Prompt Editor Phase 1: editable help-doc prompts with AI-assisted improve flow
+- app/models.py: added DocPrompt model (key, label, prompt_text, timestamps)
+- migrations/versions/1bdbff5ce391: creates doc_prompt table
+- app/doc_generator.py: replaced _SYSTEM_PROMPT constant with DEFAULT_PROMPTS dict; added _get_doc_prompt() DB-backed helper; simplified three generators to use _get_doc_prompt()
+- app/__init__.py: imports DocPrompt; table guard added; seeds four default prompts on startup
+- app/routes/models.py: added DocPrompt import; list_models() passes doc_prompts + default_prompts to template; added save_doc_prompt and reset_doc_prompt routes
+- app/routes/help.py: added log_activity import; added improve_doc_prompt (POST /help/improve/<doc_key>) and apply_improved_prompt (POST /help/improve/<doc_key>/apply) routes for AI-assisted prompt editing
+- app/templates/models/list.html: added "Help Prompts" tab with editable textarea + Save/Reset per prompt
+- app/templates/help/doc_page.html: added "Improve this doc" button and three-step modal (instruction → AI review → apply/regenerate)
+
 ## [2026-05-10] - Fix Generate Release Notes: always shows only new entries
 - app/models.py: added changelog_snapshot (TEXT) column to ReleaseNote
 - app/routes/help.py: generate_release() saves CHANGELOG.md text snapshot at publish time

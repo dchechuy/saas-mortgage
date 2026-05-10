@@ -8,7 +8,7 @@ from ..access import permission_required, user_has_access
 from ..activity_logger import log_activity
 from ..crypto import encrypt_value
 from ..extensions import db
-from ..models import AiAgent, Attribute, FeatureFlag, Integration, LlmModel, NavItem, NavSection
+from ..models import AiAgent, Attribute, DocPrompt, FeatureFlag, Integration, LlmModel, NavItem, NavSection
 from ..page_registry import NAV_ITEMS
 
 _ALLOWED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -77,6 +77,8 @@ def list_models():
         if slug not in all_slugs_in_sections
     ]
 
+    from ..doc_generator import DEFAULT_PROMPTS
+
     return render_template(
         "models/list.html",
         llm_models=LlmModel.query.order_by(LlmModel.name).all() if can_view_models else [],
@@ -92,6 +94,8 @@ def list_models():
         can_view_flags=can_view_flags,
         sections=sections_for_template,
         unassigned_pages=unassigned_pages,
+        doc_prompts=DocPrompt.query.order_by(DocPrompt.id).all(),
+        default_prompts=DEFAULT_PROMPTS,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "System Config", "url": url_for("models.list_models")},
@@ -426,3 +430,57 @@ def save_sections():
     except Exception as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Help Prompts — Option 1 (System Config direct edit)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@models_bp.route("/doc-prompts/<key>/save", methods=["POST"])
+@login_required
+@permission_required("models", "edit")
+def save_doc_prompt(key):
+    from ..doc_generator import DEFAULT_PROMPTS
+    if key not in DEFAULT_PROMPTS:
+        flash(f"Unknown prompt key: {key}", "error")
+        return _redirect_to_system_config("help-prompts")
+
+    prompt_text = request.form.get("prompt_text", "").strip()
+    if not prompt_text:
+        flash("Prompt text cannot be empty.", "error")
+        return _redirect_to_system_config("help-prompts")
+
+    row = DocPrompt.query.filter_by(key=key).first()
+    if row:
+        row.prompt_text = prompt_text
+    else:
+        db.session.add(DocPrompt(
+            key=key, label=DEFAULT_PROMPTS[key]["label"], prompt_text=prompt_text
+        ))
+    db.session.commit()
+    log_activity(current_user, "doc_prompt.saved", page="System Config")
+    flash(f"'{DEFAULT_PROMPTS[key]['label']}' prompt saved.", "success")
+    return _redirect_to_system_config("help-prompts")
+
+
+@models_bp.route("/doc-prompts/<key>/reset", methods=["POST"])
+@login_required
+@permission_required("models", "edit")
+def reset_doc_prompt(key):
+    from ..doc_generator import DEFAULT_PROMPTS
+    if key not in DEFAULT_PROMPTS:
+        flash(f"Unknown prompt key: {key}", "error")
+        return _redirect_to_system_config("help-prompts")
+
+    row = DocPrompt.query.filter_by(key=key).first()
+    if row:
+        row.prompt_text = DEFAULT_PROMPTS[key]["text"]
+    else:
+        db.session.add(DocPrompt(
+            key=key, label=DEFAULT_PROMPTS[key]["label"],
+            prompt_text=DEFAULT_PROMPTS[key]["text"]
+        ))
+    db.session.commit()
+    log_activity(current_user, "doc_prompt.reset", page="System Config")
+    flash(f"'{DEFAULT_PROMPTS[key]['label']}' reset to default.", "success")
+    return _redirect_to_system_config("help-prompts")
