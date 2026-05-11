@@ -1246,18 +1246,20 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') secCloseEdit
                       class="form-control"
                       style="font-family:monospace;font-size:0.82rem;line-height:1.6;width:100%"
                       >{{ current_text }}</textarea>
-            <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-              <button type="submit" class="btn btn-primary btn-sm">Save</button>
-              <button type="button" class="btn btn-secondary btn-sm"
-                      onclick="promptCancelEdit('{{ key }}')">Cancel</button>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+              <div style="display:flex;gap:8px">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <button type="button" class="btn btn-secondary btn-sm"
+                        onclick="promptCancelEdit('{{ key }}')">Cancel</button>
+              </div>
+              <form method="POST"
+                    action="{{ url_for('models.reset_doc_prompt', key=key) }}"
+                    style="margin:0"
+                    onsubmit="return confirm('Reset to default? This will overwrite your current text.');">
+                <button type="submit" class="btn btn-secondary btn-sm"
+                        style="color:var(--danger-text,#dc2626)">Reset to Default</button>
+              </form>
             </div>
-          </form>
-          <form method="POST"
-                action="{{ url_for('models.reset_doc_prompt', key=key) }}"
-                style="margin-top:8px"
-                onsubmit="return confirm('Reset to default? This will overwrite your current text.');">
-            <button type="submit" class="btn btn-secondary btn-sm"
-                    style="color:var(--danger-text,#dc2626)">Reset to Default</button>
           </form>
         </div>
         {% endif %}
