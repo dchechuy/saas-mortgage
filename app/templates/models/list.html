@@ -1192,8 +1192,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') secCloseEdit
       <h1 class="page-title">Help Prompts</h1>
       <p style="color:var(--muted);font-size:13px;margin:4px 0 0">
         These prompts control what the AI writes when you regenerate Quick Start,
-        User Manual, and Architecture documents. Edit any prompt, save, then
-        regenerate the document from the User Guides section.
+        User Manual, and Architecture documents.
         The System Prompt applies to all three.
       </p>
     </div>
@@ -1201,40 +1200,92 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') secCloseEdit
 
   {% set prompt_map = namespace(data={}) %}
   {% for p in doc_prompts %}{% set _ = prompt_map.data.update({p.key: p}) %}{% endfor %}
+  {% set can_edit_prompts = has_access('models', 'edit') %}
 
   {% for key, meta in default_prompts.items() %}
     {% set current = prompt_map.data.get(key) %}
     {% set current_text = current.prompt_text if current else meta.text %}
     <div class="card" style="margin-bottom:16px">
       <div class="card-body">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <h3 style="margin:0;font-size:15px;font-weight:600">{{ meta.label }}</h3>
-          {% if current %}
-          <span style="font-size:11px;color:var(--muted)">
-            Updated <span class="local-time" data-utc="{{ current.updated_at.isoformat() }}" data-format="date">
-              {{ current.updated_at.strftime('%Y-%m-%d') }}
+
+        {# ── Header row ── #}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div>
+            <h3 style="margin:0;font-size:15px;font-weight:600">{{ meta.label }}</h3>
+            {% if current %}
+            <span style="font-size:11px;color:var(--muted)">
+              Updated <span class="local-time" data-utc="{{ current.updated_at.isoformat() }}" data-format="date">
+                {{ current.updated_at.strftime('%Y-%m-%d') }}
+              </span>
             </span>
-          </span>
+            {% endif %}
+          </div>
+          {% if can_edit_prompts %}
+          <button class="btn btn-secondary btn-sm"
+                  id="prompt-edit-btn-{{ key }}"
+                  onclick="promptStartEdit('{{ key }}')">
+            Edit
+          </button>
           {% endif %}
         </div>
-        <form method="POST" action="{{ url_for('models.save_doc_prompt', key=key) }}">
-          <textarea name="prompt_text" rows="10"
-                    class="form-control"
-                    style="font-family:monospace;font-size:0.82rem;width:100%">{{ current_text }}</textarea>
-          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+
+        {# ── View mode ── #}
+        <div id="prompt-view-{{ key }}">
+          <pre style="margin:0;font-family:monospace;font-size:0.82rem;line-height:1.6;
+                      white-space:pre-wrap;word-break:break-word;
+                      background:var(--panel-muted);border:1px solid var(--border);
+                      border-radius:6px;padding:14px 16px;color:var(--text)">{{ current_text }}</pre>
+        </div>
+
+        {# ── Edit mode (hidden until Edit clicked) ── #}
+        {% if can_edit_prompts %}
+        <div id="prompt-edit-{{ key }}" style="display:none">
+          <form method="POST" action="{{ url_for('models.save_doc_prompt', key=key) }}">
+            <textarea name="prompt_text"
+                      id="prompt-textarea-{{ key }}"
+                      class="form-control"
+                      style="font-family:monospace;font-size:0.82rem;line-height:1.6;width:100%"
+                      >{{ current_text }}</textarea>
+            <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+              <button type="button" class="btn btn-secondary btn-sm"
+                      onclick="promptCancelEdit('{{ key }}')">Cancel</button>
+            </div>
           </form>
           <form method="POST"
                 action="{{ url_for('models.reset_doc_prompt', key=key) }}"
-                style="margin:0"
+                style="margin-top:8px"
                 onsubmit="return confirm('Reset to default? This will overwrite your current text.');">
-            <button type="submit" class="btn btn-secondary btn-sm">Reset to Default</button>
+            <button type="submit" class="btn btn-secondary btn-sm"
+                    style="color:var(--danger-text,#dc2626)">Reset to Default</button>
           </form>
-          </div>
+        </div>
+        {% endif %}
+
       </div>
     </div>
   {% endfor %}
 </div>
+
+<script>
+function promptStartEdit(key) {
+  document.getElementById('prompt-view-' + key).style.display = 'none';
+  document.getElementById('prompt-edit-' + key).style.display = 'block';
+  document.getElementById('prompt-edit-btn-' + key).style.display = 'none';
+  // Auto-resize textarea to fit content
+  const ta = document.getElementById('prompt-textarea-' + key);
+  if (ta) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+    ta.focus();
+  }
+}
+function promptCancelEdit(key) {
+  document.getElementById('prompt-edit-' + key).style.display = 'none';
+  document.getElementById('prompt-view-' + key).style.display = 'block';
+  document.getElementById('prompt-edit-btn-' + key).style.display = 'inline-flex';
+}
+</script>
 
 <script>
 const _TOP_SECTIONS   = ['agents', 'llm', 'apis', 'attributes', 'flags', 'sections', 'help-prompts'];
