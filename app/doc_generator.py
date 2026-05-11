@@ -230,8 +230,9 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
     except RuntimeError:
         raise
     except Exception as exc:
-        _log(status="error", error_message=str(exc))
-        raise
+        msg = str(exc) or repr(exc) or type(exc).__name__
+        _log(status="error", error_message=msg)
+        raise RuntimeError(f"{type(exc).__name__}: {msg}") from exc
 
 
 # ── Document generators ───────────────────────────────────────────
@@ -325,7 +326,10 @@ def regenerate_docs(doc_keys: list[str], user_id: int) -> dict:
             results[key] = {"ok": True, "label": _DOC_LABELS[key]}
             log.info("Generated and saved: %s", _DOC_LABELS[key])
         except Exception as exc:
-            log.error("Failed to generate '%s': %s", _DOC_LABELS.get(key, key), exc)
-            results[key] = {"ok": False, "error": str(exc)}
+            import traceback as _tb
+            msg = str(exc) or repr(exc) or type(exc).__name__
+            log.error("Failed to generate '%s': %s\n%s",
+                      _DOC_LABELS.get(key, key), msg, _tb.format_exc())
+            results[key] = {"ok": False, "error": msg}
 
     return results
