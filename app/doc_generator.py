@@ -209,7 +209,7 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
                     {"role": "system", "content": _get_doc_prompt("system")},
                     {"role": "user",   "content": prompt},
                 ],
-                "max_completion_tokens": 4000,
+                "max_completion_tokens": 8000,
             },
             timeout=120,
         )
@@ -225,7 +225,16 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
             completion_tokens=usage.get("completion_tokens"),
             total_tokens=usage.get("total_tokens"),
         )
-        return data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        finish_reason = choice.get("finish_reason", "unknown")
+        content = (choice["message"].get("content") or "").strip()
+        if not content:
+            raise RuntimeError(
+                f"LLM returned empty content (finish_reason={finish_reason!r}). "
+                f"Prompt tokens used: {usage.get('prompt_tokens', '?')}. "
+                f"Check that max_completion_tokens is large enough and content filters are not blocking."
+            )
+        return content
 
     except RuntimeError:
         raise
