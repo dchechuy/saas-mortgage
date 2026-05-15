@@ -1,55 +1,62 @@
 # Quick Start Guide
 
-Overview
---------
-This internal SaaS platform helps your team chat with AI agents, browse a centrally managed Learning Center of documents, and view or manage system-level settings (if you have the right permissions). It’s designed for everyday team members who need quick answers from AI, a searchable knowledge base, and visibility into recent activity — and for admins who manage users, AI models, integrations, and reports.
+## Overview
+This internal platform helps team members chat with AI agents, browse a Learning Center of documents, and manage basic settings. It’s designed for non-technical users who need quick answers, document-backed guidance, and simple reporting about activity.
 
-Prerequisites
--------------
-- You must have login credentials (username and password) supplied by your administrator.
-- A modern web browser (Chrome, Edge, Safari, Firefox).
+## Prerequisites
+- An active account and login credentials (username and password).
+- Permission to access Conversations, Learning Center, or Reporting (some pages may be admin-only).
+- Files to attach (optional) — common formats like PDF or images.
 
-Get started fast
-----------------
-1. Log in
-   - Open the platform URL and go to the Login page.
-   - Enter your username and password and click Sign in.
-   - If your account is inactive or credentials are incorrect you’ll see an error message. If you’re required to change a default password you’ll be prompted to do that before continuing.
+## Quick Start — 5–7 short steps
+1. Log in with your credentials at the login page.  
+2. Navigate the dashboard to view counts, recent updates, and shortcuts.  
+3. Open Conversations to pick or switch between AI Agents.  
+4. Start a conversation with an AI Agent using the chat composer.  
+5. Browse the Learning Center (Document collections) to open or search documents.  
+6. View your activity in Reporting (if you have access) to see usage and logs.  
+7. (Optional) Check Settings or click Help for more guidance.
 
-2. Navigate the dashboard
-   - After login you’ll land on the Dashboard.
-   - The Dashboard shows quick stats (users, models, integrations, recent releases) and links to common pages.
-   - Use the top or side navigation menu to jump to AI Agents, Learning Center, Reporting, or System Config sections (your menu items depend on your role).
+## Conversations
+Select an Agent
+- Open Conversations and look for the Agents list or dropdown.  
+- Choose the Agent that matches your task (names and short descriptions help).  
+- Agent avatars or labels help you confirm you picked the right one.
 
-3. Start a conversation with an AI Agent
-   - Go to “AI Agents” (or “Conversations”) from the main menu.
-   - Click the button to start a new conversation or select an existing conversation from the list.
-   - Choose an AI Agent persona if prompted, type your message in the chat box, and press Send.
-   - Conversations are saved, and your recent agents are shown first to make it faster to resume chats.
+Start a new conversation
+- Click “New Conversation” or the + button in the Conversations area.  
+- Type your question in the chat box and press Send.  
+- Use plain language and be specific for best results.
 
-4. Browse the Learning Center
-   - Open the Learning Center (often listed under “Learning”, “Documents”, or “Knowledge” in the main menu).
-   - Use the search bar or browse folders to find guides, policies, and other documents.
-   - Click a document to open it; use pagination or “load more” to see additional results (documents are paged for easier browsing).
-   - Note: If the Learning Center is empty, your organization may need to enable the Documents integration — contact your admin.
+Continue a previous conversation
+- Open the Conversations list or “Recent” area.  
+- Click a past conversation by title or timestamp to reopen it.  
+- Resume typing in the same chat thread — the Agent will keep context.
 
-5. View your activity in Reporting
-   - From the main menu, open “Reporting”.
-   - If you are an admin you’ll see tabs for LLM Requests, User Activity, and External API Requests. Non-admins may have limited/no access.
-   - To check activity:
-     - Select the “User Activity” tab.
-     - Set date range (defaults to last 30 days).
-     - Filter by user (yourself) to see actions, timestamps, and summaries of what you’ve done.
-   - Reporting also shows request counts, error rates, and other metrics helpful for troubleshooting and audits.
+Use attachments
+- Click the paperclip / Attach button in the composer to upload files.  
+- Supported file types: jpg, jpeg, png, gif, webp, pdf, docx, txt, md, csv.  
+- File size limit: 20 MB per attachment.  
+- Attachments show up in the chat as downloadable previews or links; Agents can read them and may incorporate their contents into replies.  
+- If an attachment can’t be read (wrong type or too large) you’ll see an error — try a supported format or smaller file.
 
-6. Sign out
-   - When you’re done, use the account menu to log out for security.
+## Document collections (Learning Center)
+What they are
+- Collections group related documents (policies, guides, FAQs) the AI can reference.
 
-Tips & Troubleshooting
-- If menu items or pages are missing, you may not have permission — contact an admin to request access.
-- If AI replies look incorrect, try rephrasing or switch to a different agent persona.
-- For document issues (missing docs or upload problems) reach out to your content owner or admin.
+Browse and open documents
+- Open Learning Center or Documents from the main menu.  
+- Click a collection to view its documents; click a document to open it.  
+- Use pagination or “Load more” if a collection has many items.
 
-What’s next?
-------------
-For full, step-by-step instructions, screenshots, admin tasks (user and role management, system configuration, LLM model setup, and integrations) and troubleshooting, see the full User Manual or contact your platform administrator.
+Search within documents or collections
+- Use the search bar at the top of the Learning Center to find documents or keywords.  
+- Results show documents and relevant excerpts so you can jump directly to matches.
+
+Trace AI answers back to documents
+- AI replies that used documents include a small “source” cue or citation (for example, a link or document title).  
+- Click the source label in the reply to open the originating document or view the reference.  
+- Some replies list multiple sources; use those links to verify the answer against the original text.
+
+## What's next?
+For full details, step-by-step screenshots, and admin tasks, see the full User Manual available from the Help menu or your internal documentation site.

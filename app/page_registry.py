@@ -56,7 +56,7 @@ NAV_ITEMS = {
     },
     "user_guides": {
         "label":            "User Guides",
-        "icon":             "book",
+        "icon":             "help",
         "endpoint":         "help.release_notes",
         "active_endpoints": ["help.release_notes", "help.quick_start", "help.user_manual"],
         "permission_slug":  "help",

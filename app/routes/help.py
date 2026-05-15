@@ -56,11 +56,18 @@ PAGE_META = {
 
 
 def _render_doc(name: str) -> str:
-    content = (DOCS_DIR / DOC_FILES[name]).read_text(encoding="utf-8")
-    lines = content.splitlines(keepends=True)
+    raw = (DOCS_DIR / DOC_FILES[name]).read_text(encoding="utf-8")
+    lines = raw.splitlines(keepends=True)
     if lines and lines[0].startswith("# "):
         lines = lines[1:]
-    content = "".join(lines).lstrip("\n")
+    content = "".join(lines).lstrip("\n").strip()
+    if not content:
+        return (
+            '<p style="color:var(--muted);font-style:italic">'
+            "This document hasn't been generated yet. "
+            "Click <strong>Regenerate</strong> above to create it."
+            "</p>"
+        )
     return markdown.markdown(content, extensions=["tables", "fenced_code"])
 
 

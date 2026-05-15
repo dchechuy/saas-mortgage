@@ -227,12 +227,31 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
         )
         choice = data["choices"][0]
         finish_reason = choice.get("finish_reason", "unknown")
-        content = (choice["message"].get("content") or "").strip()
+        raw_content = choice["message"].get("content")
+        content = (raw_content or "").strip()
+        log.info(
+            "LLM response: finish_reason=%r prompt_tokens=%s completion_tokens=%s "
+            "raw_content_type=%s raw_len=%s stripped_len=%s first_100=%r",
+            finish_reason,
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+            type(raw_content).__name__,
+            len(raw_content) if raw_content is not None else "None",
+            len(content),
+            content[:100],
+        )
         if not content:
             raise RuntimeError(
                 f"LLM returned empty content (finish_reason={finish_reason!r}). "
                 f"Prompt tokens used: {usage.get('prompt_tokens', '?')}. "
-                f"Check that max_completion_tokens is large enough and content filters are not blocking."
+                f"Check that max_tokens is large enough and content filters are not blocking."
+            )
+        if len(content) < 200:
+            raise RuntimeError(
+                f"LLM returned suspiciously short content ({len(content)} chars, "
+                f"finish_reason={finish_reason!r}). "
+                f"Completion tokens: {usage.get('completion_tokens', '?')}. "
+                f"Content: {content[:100]!r}"
             )
         return content
 
@@ -286,8 +305,10 @@ def _save_doc(key: str, content: str) -> None:
     """Write generated content to the appropriate docs/*.md file."""
     _DOCS_DIR.mkdir(parents=True, exist_ok=True)
     dest = _DOCS_DIR / _DOC_FILES[key]
+    log.info("Writing doc '%s': %d chars → %s", key, len(content), dest)
     dest.write_text(content, encoding="utf-8")
-    log.info("Saved generated doc: %s", dest)
+    written = dest.stat().st_size
+    log.info("Saved generated doc: %s (%d bytes on disk)", dest, written)
 
 
 # ── Orchestrator ──────────────────────────────────────────────────
