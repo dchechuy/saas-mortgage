@@ -228,9 +228,16 @@
       <h1 class="page-title">AI Agents Config</h1>
       <p class="muted" style="margin:4px 0 0">Configure agents that users can converse with in the Conversations page.</p>
     </div>
-    {% if has_access('agents', 'edit') %}
-    <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#addAgentModal">+ Add Agent</button>
-    {% endif %}
+    <div style="display:flex;align-items:center;gap:12px">
+      <label class="toggle-switch" title="Show Inactive Agents">
+        <input type="checkbox" id="show-inactive-agents" onchange="filterInactiveAgents()">
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">Show Inactive</span>
+      </label>
+      {% if has_access('agents', 'edit') %}
+      <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#addAgentModal">+ Add Agent</button>
+      {% endif %}
+    </div>
   </div>
 
   <div class="card" style="padding:0">
@@ -248,9 +255,10 @@
             {% if has_access('agents', 'edit') %}<th class="w-1"></th>{% endif %}
           </tr>
         </thead>
-        <tbody>
+        <tbody id="agents-tbody">
           {% for agent in ai_agents %}
-          <tr>
+          <tr data-active="{{ 'true' if agent.is_active else 'false' }}"
+              {% if not agent.is_active %}style="display:none"{% endif %}>
             <td>
               {% if agent.avatar_filename %}
               <div style="width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;

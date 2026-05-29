@@ -157,6 +157,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  // ── "Show Inactive" toggle for AI Agents table ───────────────────
+  window.filterInactiveAgents = () => {
+    const show = document.getElementById("show-inactive-agents")?.checked;
+    document.querySelectorAll("#agents-tbody tr[data-active]").forEach((row) => {
+      if (row.dataset.active === "false") row.style.display = show ? "" : "none";
+    });
+  };
+
   // ── "Show Inactive" toggle for External APIs table ───────────────
   window.filterInactiveApis = () => {
     const show = document.getElementById("show-inactive-apis")?.checked;
