@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-05-29] - AI Agents: Show Inactive toggle, auto-archive on deactivate, conversation safety filter
+- app/templates/models/list.html: added "Show Inactive" toggle to AI Agents Config header (OFF by default); inactive agent rows hidden on load via data-active attribute; fixed toggle CSS class (toggle-track, not toggle-slider)
+- app/templates/models/list.html: added id="agents-tbody" and data-active="{{ agent.is_active }}" to agent rows
+- app/static/js/app.js: added filterInactiveAgents() following same pattern as filterInactive() and filterInactiveApis()
+- app/routes/models.py: toggle_agent() now bulk-archives all non-archived conversations for an agent when it is deactivated; flash message reports count of archived conversations
+- app/routes/agents.py: list_conversations() base query joins AiAgent and filters AiAgent.is_active == True across all tabs (My, All, Favorites) as a permanent safety net
+
+## [2026-05-29] - Generate Release Notes modal: darker backdrop
+- app/templates/help/release_notes.html: backdrop opacity increased from rgba(0,0,0,0.45) to rgba(0,0,0,0.7) for visibility on dark theme
+
 ## [2026-05-10] - Doc Prompt Editor Phase 1: editable help-doc prompts with AI-assisted improve flow
 - app/models.py: added DocPrompt model (key, label, prompt_text, timestamps)
 - migrations/versions/1bdbff5ce391: creates doc_prompt table

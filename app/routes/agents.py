@@ -210,7 +210,11 @@ def list_conversations():
                 pass
         return q
 
-    conv_q = AgentConversation.query.filter_by(is_archived=False)
+    conv_q = (
+        AgentConversation.query
+        .join(AiAgent, AiAgent.id == AgentConversation.ai_agent_id)
+        .filter(AgentConversation.is_archived == False, AiAgent.is_active == True)
+    )
     if tab == "all":
         if f_agent_ids:
             conv_q = conv_q.filter(AgentConversation.ai_agent_id.in_(f_agent_ids))
