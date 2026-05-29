@@ -8,7 +8,7 @@ from ..access import permission_required, user_has_access
 from ..activity_logger import log_activity
 from ..crypto import encrypt_value
 from ..extensions import db
-from ..models import AiAgent, Attribute, DocPrompt, FeatureFlag, Integration, LlmModel, NavItem, NavSection
+from ..models import AgentConversation, AiAgent, Attribute, DocPrompt, FeatureFlag, Integration, LlmModel, NavItem, NavSection
 from ..page_registry import NAV_ITEMS
 
 _ALLOWED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -382,10 +382,24 @@ def save_agent(agent_id):
 def toggle_agent(agent_id):
     agent = db.get_or_404(AiAgent, agent_id)
     agent.is_active = not agent.is_active
+
+    if not agent.is_active:
+        # Archive all active conversations for this agent
+        archived = (
+            AgentConversation.query
+            .filter_by(ai_agent_id=agent.id, is_archived=False)
+            .update({"is_archived": True}, synchronize_session="fetch")
+        )
+    else:
+        archived = 0
+
     db.session.commit()
     state = "activated" if agent.is_active else "deactivated"
     log_activity(current_user, f"agent.{state}", page="System Config")
-    flash(f"Agent '{agent.name}' {state}.", "success")
+    msg = f"Agent '{agent.name}' {state}."
+    if archived:
+        msg += f" {archived} conversation{'s' if archived != 1 else ''} archived."
+    flash(msg, "success")
     return _redirect_to_system_config("agents")
 
 
