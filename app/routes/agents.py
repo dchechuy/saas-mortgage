@@ -222,12 +222,15 @@ def list_conversations():
             conv_q = conv_q.filter(AgentConversation.user_id.in_(f_user_ids))
         conv_q = _apply_date_filters(conv_q)
     elif tab == "favorites":
-        conv_q = conv_q.filter_by(user_id=current_user.id, is_favorite=True)
+        conv_q = conv_q.filter(
+            AgentConversation.user_id == current_user.id,
+            AgentConversation.is_favorite == True,
+        )
         if f_agent_ids:
             conv_q = conv_q.filter(AgentConversation.ai_agent_id.in_(f_agent_ids))
         conv_q = _apply_date_filters(conv_q)
     else:  # mine (default)
-        conv_q = conv_q.filter_by(user_id=current_user.id)
+        conv_q = conv_q.filter(AgentConversation.user_id == current_user.id)
     conversations = conv_q.order_by(AgentConversation.updated_at.desc()).all()
 
     all_users = (
