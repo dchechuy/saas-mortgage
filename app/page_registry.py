@@ -1,15 +1,17 @@
 ACCESS_LEVELS = ["no_access", "view", "edit"]
 
 PAGES = [
+    {"slug": "conversations", "label": "Conversations"},
+    {"slug": "learning_center", "label": "Learning Center"},
+    {"slug": "users", "label": "User Management"},
+    {"slug": "permissions", "label": "Roles & Permissions"},
+    {"slug": "attributes", "label": "System Config"},
+    {"slug": "reporting", "label": "Reporting"},
+    {"slug": "help", "label": "User Guides"},
     {"slug": "dashboard", "label": "Dashboard"},
-    {"slug": "users", "label": "Users"},
-    {"slug": "permissions", "label": "Permissions"},
     {"slug": "models", "label": "LLM Models"},
-    {"slug": "attributes", "label": "Attributes"},
     {"slug": "integrations", "label": "Integrations"},
     {"slug": "agents", "label": "AI Agents"},
-    {"slug": "reporting", "label": "Reporting"},
-    {"slug": "help", "label": "Help"},
 ]
 
 # Registry for nav items that can appear in the left sidebar.
@@ -21,7 +23,7 @@ NAV_ITEMS = {
         "endpoint":         "agents.list_conversations",
         "active_endpoints": ["agents.list_conversations", "agents.view_conversation",
                              "agents.new_conversation"],
-        "permission_slug":  "agents",
+        "permission_slug":  "conversations",
         "feature_flag":     "conversations",
     },
     "learning_center": {
@@ -29,7 +31,7 @@ NAV_ITEMS = {
         "icon":             "book",
         "endpoint":         "agents.learning_center",
         "active_endpoints": ["agents.learning_center", "agents.learning_center_doc"],
-        "permission_slug":  "agents",
+        "permission_slug":  "learning_center",
         "feature_flag":     "learning_center",
     },
     "user_management": {

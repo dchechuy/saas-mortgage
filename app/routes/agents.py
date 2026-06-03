@@ -161,7 +161,7 @@ def _call_skunkbox(integration, skunkbox_agent_id: int,
 
 @agents_bp.route("/")
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def list_conversations():
     # ── Auto-delete empty conversations (no messages sent) ──────────────────
     has_msg_subq = db.session.query(AgentMessage.conversation_id).distinct()
@@ -263,7 +263,7 @@ def list_conversations():
 
 @agents_bp.route("/new", methods=["POST"])
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def new_conversation():
     agent_id = request.form.get("agent_id", "").strip()
     if not agent_id:
@@ -305,10 +305,10 @@ def new_conversation():
 
 @agents_bp.route("/<int:conversation_id>")
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def view_conversation(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
-    if conv.user_id != current_user.id:
+    if conv.user_id != current_user.id and not current_user.is_admin():
         abort(403)
 
     raw_messages = conv.messages.order_by(AgentMessage.created_at).all()
@@ -363,10 +363,10 @@ def view_conversation(conversation_id):
 
 @agents_bp.route("/<int:conversation_id>/send", methods=["POST"])
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def send_message(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
-    if conv.user_id != current_user.id:
+    if conv.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"ok": False, "error": "Forbidden"}), 403
 
     data = request.get_json(force=True) or {}
@@ -480,10 +480,10 @@ def send_message(conversation_id):
 
 @agents_bp.route("/<int:conversation_id>/attachments", methods=["POST"])
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def upload_attachment(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
-    if conv.user_id != current_user.id:
+    if conv.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"ok": False, "error": "Forbidden"}), 403
 
     file = request.files.get("file")
@@ -513,7 +513,7 @@ def upload_attachment(conversation_id):
 
 @agents_bp.route("/attachments/<int:skunkbox_attachment_id>/download")
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def download_attachment(skunkbox_attachment_id):
     """Proxy a file download from skunkBOX.
     Security: verify the current user owns a conversation containing this attachment.
@@ -570,7 +570,7 @@ def download_attachment(skunkbox_attachment_id):
 
 @agents_bp.route("/learning-center")
 @login_required
-@permission_required("agents", "view")
+@permission_required("learning_center", "view")
 def learning_center():
     page       = request.args.get("page", 1, type=int)
     active_tab = request.args.get("tab", "all")   # "all" or str(collection_id)
@@ -642,7 +642,7 @@ def learning_center():
 
 @agents_bp.route("/learning-center/<doc_id>")
 @login_required
-@permission_required("agents", "view")
+@permission_required("learning_center", "view")
 def learning_center_doc(doc_id):
     integration = _get_docs_integration()
     doc, error = None, None
@@ -673,7 +673,7 @@ def learning_center_doc(doc_id):
 
 @agents_bp.route("/learning-center/<doc_id>/file")
 @login_required
-@permission_required("agents", "view")
+@permission_required("learning_center", "view")
 def learning_center_file(doc_id):
     """Proxy the raw file from skunkBOX so the browser can display it inline.
     Tries several common download URL patterns in order."""
@@ -725,10 +725,10 @@ def _proxy_error(message: str):
 
 @agents_bp.route("/<int:conversation_id>/favorite", methods=["POST"])
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def toggle_favorite(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
-    if conv.user_id != current_user.id:
+    if conv.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"ok": False, "error": "Forbidden"}), 403
     conv.is_favorite = not conv.is_favorite
     db.session.commit()
@@ -737,10 +737,10 @@ def toggle_favorite(conversation_id):
 
 @agents_bp.route("/<int:conversation_id>/archive", methods=["POST"])
 @login_required
-@permission_required("agents", "view")
+@permission_required("conversations", "view")
 def archive_conversation(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
-    if conv.user_id != current_user.id:
+    if conv.user_id != current_user.id and not current_user.is_admin():
         abort(403)
     conv.is_archived = True
     db.session.commit()

@@ -1,5 +1,8 @@
 # Changelog
 
+## [2026-06-02] - Fix 403 on AI Conversations for admin users
+- app/routes/agents.py: relaxed ownership checks in view_conversation, send_message, upload_attachment, toggle_favorite, and archive_conversation to allow admin users to access any conversation
+
 ## [2026-05-29] - AI Agents: Show Inactive toggle, auto-archive on deactivate, conversation safety filter
 - app/templates/models/list.html: added "Show Inactive" toggle to AI Agents Config header (OFF by default); inactive agent rows hidden on load via data-active attribute; fixed toggle CSS class (toggle-track, not toggle-slider)
 - app/templates/models/list.html: added id="agents-tbody" and data-active="{{ agent.is_active }}" to agent rows
