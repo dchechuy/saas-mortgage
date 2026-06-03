@@ -220,7 +220,7 @@
 
 {% for role in roles if role.name|lower != 'admin' %}
 <div class="modal modal-blur fade" id="editRoleModal{{ role.id }}" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:960px">
     <div class="modal-content">
       <form method="post" action="{{ url_for('permissions.save_role', role_id=role.id) }}">
         <div class="modal-header">
@@ -234,21 +234,21 @@
           </div>
 
           {% for page in pages %}
-          <div class="perm-modal-row">
+          {% set current_level = role.get_permission(page.slug) %}
+          {% set current_scope = role.get_scope(page.slug) if page.scoped else None %}
+          <div class="perm-modal-row" style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:16px">
             <div class="perm-modal-page">{{ page.label }}</div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div class="perm-toggle-group">
-                {% for level in ['no_access', 'view', 'edit'] %}
-                <label class="perm-toggle-btn perm-toggle-{{ 'none' if level == 'no_access' else level }} {% if role.get_permission(page.slug) == level %}active{% endif %}">
-                  <input type="radio" name="perm_{{ page.slug }}" value="{{ level }}" {% if role.get_permission(page.slug) == level %}checked{% endif %} hidden
-                         {% if page.scoped %}onchange="updateScopeToggle('{{ page.slug }}', this.value)"{% endif %}>
-                  {{ 'No Access' if level == 'no_access' else level|capitalize }}
-                </label>
-                {% endfor %}
-              </div>
+            <div class="perm-toggle-group">
+              {% for level in ['no_access', 'view', 'edit'] %}
+              <label class="perm-toggle-btn perm-toggle-{{ 'none' if level == 'no_access' else level }} {% if current_level == level %}active{% endif %}">
+                <input type="radio" name="perm_{{ page.slug }}" value="{{ level }}" {% if current_level == level %}checked{% endif %} hidden
+                       {% if page.scoped %}onchange="updateScopeToggle('{{ page.slug }}', this.value)"{% endif %}>
+                {{ 'No Access' if level == 'no_access' else level|capitalize }}
+              </label>
+              {% endfor %}
+            </div>
+            <div style="width:120px;display:flex;justify-content:flex-start">
               {% if page.scoped %}
-              {% set current_level = role.get_permission(page.slug) %}
-              {% set current_scope = role.get_scope(page.slug) %}
               <div class="perm-toggle-group scope-toggle-{{ page.slug }}"
                    style="{{ 'display:none' if current_level == 'no_access' else '' }}">
                 {% for s in ['own', 'all'] %}
