@@ -342,10 +342,13 @@ def view_conversation(conversation_id):
         }
         for m in raw_messages
     ]
+    from ..models import User as _User
+    conv_user = db.session.get(_User, conv.user_id)
     return render_template(
         "agents/conversation.html",
         conv=conv,
         agent=conv.agent,
+        conv_user=conv_user,
         messages=raw_messages,
         messages_data=messages_data,
         attachments_by_message_id=attachments_by_message_id,
