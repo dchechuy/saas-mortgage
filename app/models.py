@@ -60,6 +60,8 @@ class Role(db.Model):
         return "no_access"
 
     def get_scope(self, page_slug: str) -> str:
+        if self.name.lower() == "admin":
+            return "all"
         for permission in self.permissions:
             if permission.page_slug == page_slug:
                 return permission.scope
