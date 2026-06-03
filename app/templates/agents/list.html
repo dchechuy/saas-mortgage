@@ -7,8 +7,10 @@
 <div class="tax-tabs" style="margin-bottom:24px">
   <a href="{{ url_for('agents.list_conversations') }}"
      class="tax-tab {{ 'active' if tab == 'mine' else '' }}">My Conversations</a>
+  {% if user_scope == 'all' %}
   <a href="{{ url_for('agents.list_conversations', tab='all') }}"
      class="tax-tab {{ 'active' if tab == 'all' else '' }}">All Conversations</a>
+  {% endif %}
   <a href="{{ url_for('agents.list_conversations', tab='favorites') }}"
      class="tax-tab {{ 'active' if tab == 'favorites' else '' }}">⭐ Favorites</a>
 </div>

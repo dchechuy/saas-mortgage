@@ -28,6 +28,26 @@ def user_has_access(page_slug: str, min_level: str = "view") -> bool:
     return ACCESS_LEVELS.index(level) >= ACCESS_LEVELS.index(min_level)
 
 
+def get_user_scope(page_slug: str) -> str:
+    """Return 'all' or 'own' for the current user on the given page.
+
+    Admins always get 'all'. Non-authenticated users get 'own'.
+    """
+    if not current_user.is_authenticated:
+        return "own"
+    if current_user.is_admin():
+        return "all"
+
+    from .models import Permission, Role
+
+    role = Role.query.filter_by(name=current_user.role).first()
+    permission = (
+        Permission.query.filter_by(role_id=role.id, page_slug=page_slug).first()
+        if role else None
+    )
+    return permission.scope if permission else "own"
+
+
 def permission_required(page_slug: str, min_level: str = "view"):
     def decorator(view_func):
         @wraps(view_func)

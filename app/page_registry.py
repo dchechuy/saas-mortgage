@@ -1,7 +1,7 @@
 ACCESS_LEVELS = ["no_access", "view", "edit"]
 
 PAGES = [
-    {"slug": "conversations", "label": "Conversations"},
+    {"slug": "conversations", "label": "Conversations", "scoped": True},
     {"slug": "learning_center", "label": "Learning Center"},
     {"slug": "users", "label": "User Management"},
     {"slug": "permissions", "label": "Roles & Permissions"},

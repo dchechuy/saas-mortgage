@@ -57,11 +57,17 @@ def save_role(role_id):
         level = request.form.get(f"perm_{page['slug']}", "no_access")
         if level not in ACCESS_LEVELS:
             level = "no_access"
+        scope = "own"
+        if page.get("scoped") and level != "no_access":
+            raw_scope = request.form.get(f"scope_{page['slug']}", "own")
+            scope = "all" if raw_scope == "all" else "own"
         permission = Permission.query.filter_by(role_id=role.id, page_slug=page["slug"]).first()
         if permission:
             permission.access_level = level
+            if page.get("scoped"):
+                permission.scope = scope
         else:
-            db.session.add(Permission(role_id=role.id, page_slug=page["slug"], access_level=level))
+            db.session.add(Permission(role_id=role.id, page_slug=page["slug"], access_level=level, scope=scope))
 
     db.session.commit()
     flash(f"Role '{new_name}' saved.", "success")

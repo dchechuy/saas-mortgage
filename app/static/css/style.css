@@ -1191,6 +1191,21 @@ textarea:focus,
 .perm-toggle-none.active { background: #94a3b8; color: #fff; }
 .perm-toggle-view.active { background: #2563eb; color: #fff; }
 .perm-toggle-edit.active { background: #16a34a; color: #fff; }
+.perm-toggle-scope.active { background: #6366f1; color: #fff; }
+
+.scope-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+  margin-left: 5px;
+  vertical-align: middle;
+  text-transform: capitalize;
+}
 
 .prose {
   max-width: 900px;

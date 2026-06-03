@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-06-02] - Permissions: Own/All scope for Conversations + View/Edit distinction
+- app/models.py: added `scope` column (own/all) to Permission model; added get_scope() helper to Role
+- app/access.py: added get_user_scope() helper
+- app/page_registry.py: marked conversations as scoped: True; added conversations and learning_center to PAGES; updated labels to match nav (User Management, System Config, User Guides, etc.)
+- app/routes/permissions.py: save_role now reads and persists scope for scoped pages
+- app/routes/agents.py: split conversations routes into view (list, view, download, favorite) and edit (new, send, upload, archive); enforce scope — own-scoped users cannot access All tab or other users' conversations; added get_user_scope import
+- app/templates/users/list.html: permissions edit modal shows Own/All scope toggle for Conversations; summary table shows scope pill next to page name in Edit/View columns
+- app/templates/agents/list.html: All Conversations tab hidden when user scope is own
+- app/static/css/style.css: added .perm-toggle-scope and .scope-pill styles
+
 ## [2026-06-02] - Fix 403 on AI Conversations for admin users
 - app/routes/agents.py: relaxed ownership checks in view_conversation, send_message, upload_attachment, toggle_favorite, and archive_conversation to allow admin users to access any conversation
 

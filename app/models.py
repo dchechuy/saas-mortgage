@@ -59,6 +59,12 @@ class Role(db.Model):
                 return permission.access_level
         return "no_access"
 
+    def get_scope(self, page_slug: str) -> str:
+        for permission in self.permissions:
+            if permission.page_slug == page_slug:
+                return permission.scope
+        return "own"
+
 
 class Permission(db.Model):
     __tablename__ = "permission"
@@ -67,6 +73,7 @@ class Permission(db.Model):
     role_id = db.Column(db.Integer, db.ForeignKey("role.id"), nullable=False)
     page_slug = db.Column(db.String(80), nullable=False)
     access_level = db.Column(db.String(20), nullable=False, default="no_access")
+    scope = db.Column(db.String(10), nullable=False, default="own")  # "own" | "all"
 
     __table_args__ = (
         db.UniqueConstraint("role_id", "page_slug", name="uq_role_page"),

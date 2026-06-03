@@ -5,7 +5,7 @@ from flask import (Blueprint, Response, abort, flash, jsonify, redirect,
                    render_template, request, stream_with_context, url_for)
 from flask_login import current_user, login_required
 
-from ..access import permission_required
+from ..access import get_user_scope, permission_required
 from ..activity_logger import log_activity
 from ..crypto import decrypt_value
 from ..extensions import db
@@ -163,12 +163,15 @@ def _call_skunkbox(integration, skunkbox_agent_id: int,
 @login_required
 @permission_required("conversations", "view")
 def list_conversations():
-    # ── Auto-delete empty conversations (no messages sent) ──────────────────
+    # ── Auto-delete empty conversations (no messages sent, older than 30 min) ──
+    from datetime import datetime as _dt, timedelta as _td
+    cutoff = _dt.utcnow() - _td(minutes=30)
     has_msg_subq = db.session.query(AgentMessage.conversation_id).distinct()
     (AgentConversation.query
      .filter(
          AgentConversation.user_id == current_user.id,
          AgentConversation.id.notin_(has_msg_subq),
+         AgentConversation.created_at < cutoff,
      )
      .delete(synchronize_session="fetch"))
     db.session.commit()
@@ -190,7 +193,11 @@ def list_conversations():
         a.name.lower(),                        # then alpha
     ))
 
+    user_scope = get_user_scope("conversations")
     tab = request.args.get("tab", "mine")  # mine | all | favorites
+    # Non-admins with "own" scope cannot access the All tab
+    if tab == "all" and user_scope != "all":
+        tab = "mine"
 
     f_agent_ids = request.args.getlist("agent_ids", type=int)
     f_user_ids  = request.args.getlist("user_ids", type=int)
@@ -244,6 +251,7 @@ def list_conversations():
         ai_agents=ai_agents,
         conversations=conversations,
         tab=tab,
+        user_scope=user_scope,
         all_users=all_users,
         f_agent_ids=f_agent_ids,
         f_user_ids=f_user_ids,
@@ -263,7 +271,7 @@ def list_conversations():
 
 @agents_bp.route("/new", methods=["POST"])
 @login_required
-@permission_required("conversations", "view")
+@permission_required("conversations", "edit")
 def new_conversation():
     agent_id = request.form.get("agent_id", "").strip()
     if not agent_id:
@@ -308,8 +316,11 @@ def new_conversation():
 @permission_required("conversations", "view")
 def view_conversation(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
-    if conv.user_id != current_user.id and not current_user.is_admin():
-        abort(403)
+    if conv.user_id != current_user.id:
+        if current_user.is_admin() or get_user_scope("conversations") == "all":
+            pass  # allowed
+        else:
+            abort(403)
 
     raw_messages = conv.messages.order_by(AgentMessage.created_at).all()
 
@@ -366,7 +377,7 @@ def view_conversation(conversation_id):
 
 @agents_bp.route("/<int:conversation_id>/send", methods=["POST"])
 @login_required
-@permission_required("conversations", "view")
+@permission_required("conversations", "edit")
 def send_message(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
     if conv.user_id != current_user.id and not current_user.is_admin():
@@ -483,7 +494,7 @@ def send_message(conversation_id):
 
 @agents_bp.route("/<int:conversation_id>/attachments", methods=["POST"])
 @login_required
-@permission_required("conversations", "view")
+@permission_required("conversations", "edit")
 def upload_attachment(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
     if conv.user_id != current_user.id and not current_user.is_admin():
@@ -740,7 +751,7 @@ def toggle_favorite(conversation_id):
 
 @agents_bp.route("/<int:conversation_id>/archive", methods=["POST"])
 @login_required
-@permission_required("conversations", "view")
+@permission_required("conversations", "edit")
 def archive_conversation(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
     if conv.user_id != current_user.id and not current_user.is_admin():

@@ -108,9 +108,10 @@
     {% set none_pages = [] %}
     {% for page in pages %}
       {% set level = role.get_permission(page.slug) %}
-      {% if level == 'edit' %}{% set _ = edit_pages.append(page.label) %}
-      {% elif level == 'view' %}{% set _ = view_pages.append(page.label) %}
-      {% else %}{% set _ = none_pages.append(page.label) %}{% endif %}
+      {% set scope = role.get_scope(page.slug) if page.scoped else None %}
+      {% if level == 'edit' %}{% set _ = edit_pages.append((page.label, scope)) %}
+      {% elif level == 'view' %}{% set _ = view_pages.append((page.label, scope)) %}
+      {% else %}{% set _ = none_pages.append((page.label, None)) %}{% endif %}
     {% endfor %}
 
     <div class="perm-card perm-card-skunk" data-active="true">
@@ -128,8 +129,11 @@
           <div class="perm-box-header perm-box-edit">Edit</div>
           <div class="perm-box-body">
             {% if edit_pages %}
-              {% for name in edit_pages | sort %}
-              <div class="perm-item {% if loop.index is even %}perm-item-alt{% endif %}">{{ name }}</div>
+              {% for name, scope in edit_pages | sort %}
+              <div class="perm-item {% if loop.index is even %}perm-item-alt{% endif %}">
+                {{ name }}
+                {% if scope %}<span class="scope-pill">{{ scope | capitalize }}</span>{% endif %}
+              </div>
               {% endfor %}
             {% else %}
               <div class="perm-item perm-item-empty">No pages</div>
@@ -141,8 +145,11 @@
           <div class="perm-box-header perm-box-view">View</div>
           <div class="perm-box-body">
             {% if view_pages %}
-              {% for name in view_pages | sort %}
-              <div class="perm-item {% if loop.index is even %}perm-item-alt{% endif %}">{{ name }}</div>
+              {% for name, scope in view_pages | sort %}
+              <div class="perm-item {% if loop.index is even %}perm-item-alt{% endif %}">
+                {{ name }}
+                {% if scope %}<span class="scope-pill">{{ scope | capitalize }}</span>{% endif %}
+              </div>
               {% endfor %}
             {% else %}
               <div class="perm-item perm-item-empty">No pages</div>
@@ -154,7 +161,7 @@
           <div class="perm-box-header perm-box-none">No Access</div>
           <div class="perm-box-body">
             {% if none_pages %}
-              {% for name in none_pages | sort %}
+              {% for name, scope in none_pages | sort %}
               <div class="perm-item {% if loop.index is even %}perm-item-alt{% endif %}">{{ name }}</div>
               {% endfor %}
             {% else %}
@@ -229,13 +236,29 @@
           {% for page in pages %}
           <div class="perm-modal-row">
             <div class="perm-modal-page">{{ page.label }}</div>
-            <div class="perm-toggle-group">
-              {% for level in ['no_access', 'view', 'edit'] %}
-              <label class="perm-toggle-btn perm-toggle-{{ 'none' if level == 'no_access' else level }} {% if role.get_permission(page.slug) == level %}active{% endif %}">
-                <input type="radio" name="perm_{{ page.slug }}" value="{{ level }}" {% if role.get_permission(page.slug) == level %}checked{% endif %} hidden>
-                {{ 'No Access' if level == 'no_access' else level|capitalize }}
-              </label>
-              {% endfor %}
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div class="perm-toggle-group">
+                {% for level in ['no_access', 'view', 'edit'] %}
+                <label class="perm-toggle-btn perm-toggle-{{ 'none' if level == 'no_access' else level }} {% if role.get_permission(page.slug) == level %}active{% endif %}">
+                  <input type="radio" name="perm_{{ page.slug }}" value="{{ level }}" {% if role.get_permission(page.slug) == level %}checked{% endif %} hidden
+                         {% if page.scoped %}onchange="updateScopeToggle('{{ page.slug }}', this.value)"{% endif %}>
+                  {{ 'No Access' if level == 'no_access' else level|capitalize }}
+                </label>
+                {% endfor %}
+              </div>
+              {% if page.scoped %}
+              {% set current_level = role.get_permission(page.slug) %}
+              {% set current_scope = role.get_scope(page.slug) %}
+              <div class="perm-toggle-group scope-toggle-{{ page.slug }}"
+                   style="{{ 'display:none' if current_level == 'no_access' else '' }}">
+                {% for s in ['own', 'all'] %}
+                <label class="perm-toggle-btn perm-toggle-scope {% if current_scope == s %}active{% endif %}">
+                  <input type="radio" name="scope_{{ page.slug }}" value="{{ s }}" {% if current_scope == s %}checked{% endif %} hidden>
+                  {{ s | capitalize }}
+                </label>
+                {% endfor %}
+              </div>
+              {% endif %}
             </div>
           </div>
           {% endfor %}
@@ -251,6 +274,12 @@
 {% endfor %}
 
 <script>
+function updateScopeToggle(slug, level) {
+  document.querySelectorAll('.scope-toggle-' + slug).forEach(el => {
+    el.style.display = (level === 'no_access') ? 'none' : '';
+  });
+}
+
 function switchUserTab(tabName) {
   const usersTab = document.getElementById('tab-users');
   const permissionsTab = document.getElementById('tab-permissions');
