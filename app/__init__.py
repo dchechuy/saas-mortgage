@@ -150,17 +150,6 @@ def _seed_defaults() -> None:
     elif not admin_role.is_system:
         admin_role.is_system = True
 
-    member_role = Role.query.filter_by(name="member").first()
-    if not member_role:
-        member_role = Role(name="member", is_system=False)
-        db.session.add(member_role)
-        db.session.flush()
-        for page in PAGES:
-            level = "view" if page["slug"] in {"dashboard", "help"} else "no_access"
-            db.session.add(Permission(role_id=member_role.id, page_slug=page["slug"], access_level=level))
-    elif member_role.is_system:
-        member_role.is_system = False
-
     for role in Role.query.all():
         role.is_system = role.name.lower() == "admin"
 
