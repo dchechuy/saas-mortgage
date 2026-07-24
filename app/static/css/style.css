@@ -105,9 +105,9 @@ a:hover {
 .sidebar-brand:hover { background: rgba(255,255,255,0.05); }
 
 .brand-mark {
-  width: 45px;
-  height: 45px;
-  border-radius: 14px;
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
   display: block;
   object-fit: cover;
   flex-shrink: 0;
