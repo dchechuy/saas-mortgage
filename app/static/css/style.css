@@ -115,9 +115,9 @@ a:hover {
 }
 
 .sidebar-brand-title {
-  font-family: "Arial Black", "Arial Narrow", Arial, sans-serif;
+  font-family: "Arial Narrow", "Instrument Sans", Arial, sans-serif;
   font-size: 22px;
-  font-weight: 900;
+  font-weight: bold;
   line-height: 1;
   padding-top: 3px;
   color: var(--brand-title);
