@@ -96,7 +96,8 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px 14px;
+  height: 56px;
+  padding: 0 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
   user-select: none;
@@ -194,7 +195,7 @@ a:hover {
 
 /* ── Sidebar collapsed state ──────────────────────────────── */
 .sidebar.collapsed .sidebar-brand-copy { display: none; }
-.sidebar.collapsed .sidebar-brand { padding: 16px 0 14px; justify-content: center; gap: 0; }
+.sidebar.collapsed .sidebar-brand { padding: 0; justify-content: center; gap: 0; }
 .sidebar.collapsed .brand-mark { width: 45px; height: 45px; border-radius: 14px; }
 .sidebar.collapsed .nav-section-label {
   padding: 14px 16px 8px;
