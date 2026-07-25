@@ -6,6 +6,20 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .extensions import db
 
 
+class Tenant(db.Model):
+    """A tenant-isolated workspace. Cofficiency is the protected internal tenant;
+    all other tenants are customer POC/prototype workspaces."""
+    __tablename__ = "tenant"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), unique=True, nullable=False)
+    slug = db.Column(db.String(120), unique=True, nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    is_protected = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "user"
 
@@ -19,9 +33,16 @@ class User(UserMixin, db.Model):
     avatar = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     must_change_password = db.Column(db.Boolean, nullable=False, default=False)
+    # Immutable home tenant, assigned at creation. Route-level immutability enforcement is Phase 3.
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
+    # Remembered active tenant for Cofficiency users; ignored for external users (Phase 2 resolves active tenant).
+    last_active_tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     last_login = db.Column(db.DateTime, nullable=True)
+
+    tenant = db.relationship("Tenant", foreign_keys=[tenant_id], backref=db.backref("users", lazy="dynamic"))
+    last_active_tenant = db.relationship("Tenant", foreign_keys=[last_active_tenant_id])
 
     @property
     def display_name(self) -> str:
@@ -86,7 +107,8 @@ class LlmModel(db.Model):
     __tablename__ = "llm_model"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
     provider = db.Column(db.String(80), nullable=False, default="Azure OpenAI")
     deployment_name = db.Column(db.String(120), nullable=False)
     endpoint_url = db.Column(db.String(255), nullable=False)
@@ -97,19 +119,28 @@ class LlmModel(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    tenant = db.relationship("Tenant", backref=db.backref("llm_models", lazy="dynamic"))
+
+    __table_args__ = (
+        db.UniqueConstraint("tenant_id", "name", name="uq_llm_model_tenant_name"),
+    )
+
 
 class Attribute(db.Model):
     __tablename__ = "attribute"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
     category = db.Column(db.String(80), nullable=False)
     name = db.Column(db.String(120), nullable=False)
     description = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    tenant = db.relationship("Tenant", backref=db.backref("attributes", lazy="dynamic"))
+
     __table_args__ = (
-        db.UniqueConstraint("category", "name", name="uq_attribute_category_name"),
+        db.UniqueConstraint("tenant_id", "category", "name", name="uq_attribute_tenant_category_name"),
     )
 
 
@@ -117,7 +148,8 @@ class Integration(db.Model):
     __tablename__ = "integration"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
     category = db.Column(db.String(80), nullable=False)
     provider = db.Column(db.String(80), nullable=False)
     use_case = db.Column(db.String(40), nullable=False, default="AI Agents")
@@ -127,6 +159,12 @@ class Integration(db.Model):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, onupdate=datetime.utcnow)
+
+    tenant = db.relationship("Tenant", backref=db.backref("integrations", lazy="dynamic"))
+
+    __table_args__ = (
+        db.UniqueConstraint("tenant_id", "name", name="uq_integration_tenant_name"),
+    )
 
 
 class ReleaseNote(db.Model):
@@ -160,6 +198,7 @@ class LlmRequestLog(db.Model):
     __tablename__ = "llm_request_log"
 
     id                = db.Column(db.Integer, primary_key=True)
+    tenant_id         = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
     model_id          = db.Column(db.Integer, db.ForeignKey("llm_model.id"), nullable=True)
     model_name        = db.Column(db.String(120), nullable=True)   # snapshot at call time
     use_case          = db.Column(db.String(80),  nullable=True)   # e.g. 'chat', 'adhoc'
@@ -171,6 +210,7 @@ class LlmRequestLog(db.Model):
     error_message     = db.Column(db.Text, nullable=True)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    tenant = db.relationship("Tenant", backref=db.backref("llm_request_logs", lazy="dynamic"))
     model = db.relationship("LlmModel", backref=db.backref("request_logs", lazy="dynamic"))
 
 
@@ -179,12 +219,14 @@ class UserActivityLog(db.Model):
     __tablename__ = "user_activity_log"
 
     id         = db.Column(db.Integer, primary_key=True)
+    tenant_id  = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
     user_id    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     action     = db.Column(db.String(120), nullable=False)   # e.g. 'user.login'
     page       = db.Column(db.String(80),  nullable=True)    # friendly page name
     ip_address = db.Column(db.String(45),  nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    tenant = db.relationship("Tenant", backref=db.backref("user_activity_logs", lazy="dynamic"))
     user = db.relationship("User", backref=db.backref("activity_logs", lazy="dynamic"))
 
 
@@ -193,6 +235,7 @@ class ApiRequestLog(db.Model):
     __tablename__ = "api_request_log"
 
     id               = db.Column(db.Integer, primary_key=True)
+    tenant_id        = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
     integration_id   = db.Column(db.Integer, db.ForeignKey("integration.id"), nullable=True)
     integration_name = db.Column(db.String(120), nullable=True)  # snapshot at call time
     endpoint         = db.Column(db.String(255), nullable=True)
@@ -202,6 +245,7 @@ class ApiRequestLog(db.Model):
     error_message    = db.Column(db.Text, nullable=True)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    tenant = db.relationship("Tenant", backref=db.backref("api_request_logs", lazy="dynamic"))
     integration = db.relationship("Integration", backref=db.backref("request_logs", lazy="dynamic"))
 
 
@@ -210,6 +254,7 @@ class AiAgent(db.Model):
     __tablename__ = "ai_agent"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
     name = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text, nullable=True)
     integration_id = db.Column(db.Integer, db.ForeignKey("integration.id"), nullable=False)
@@ -219,6 +264,7 @@ class AiAgent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    tenant = db.relationship("Tenant", backref=db.backref("ai_agents", lazy="dynamic"))
     integration = db.relationship("Integration", backref=db.backref("ai_agents", lazy="dynamic"))
     conversations = db.relationship("AgentConversation", backref="agent", lazy="dynamic")
 
@@ -228,6 +274,9 @@ class AgentConversation(db.Model):
     __tablename__ = "agent_conversation"
 
     id = db.Column(db.Integer, primary_key=True)
+    # Stored explicitly (not merely inferred from user/agent) to preserve historical
+    # attribution and support direct authorization checks.
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
     title = db.Column(db.String(255), nullable=True)
     ai_agent_id = db.Column(db.Integer, db.ForeignKey("ai_agent.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -237,6 +286,7 @@ class AgentConversation(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    tenant = db.relationship("Tenant", backref=db.backref("agent_conversations", lazy="dynamic"))
     user = db.relationship("User", backref=db.backref("agent_conversations", lazy="dynamic"))
     messages = db.relationship("AgentMessage", backref="conversation", lazy="dynamic",
                                order_by="AgentMessage.created_at", cascade="all, delete-orphan")
@@ -326,6 +376,25 @@ class FeatureFlag(db.Model):
     description = db.Column(db.String(255), nullable=True)
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, onupdate=datetime.utcnow)
+
+
+class TenantFeatureFlag(db.Model):
+    """Per-tenant override of a FeatureFlag's global default. Absence of a row
+    means the tenant uses FeatureFlag.is_enabled."""
+    __tablename__ = "tenant_feature_flag"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
+    feature_flag_id = db.Column(db.Integer, db.ForeignKey("feature_flag.id"), nullable=False)
+    is_enabled = db.Column(db.Boolean, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    tenant = db.relationship("Tenant", backref=db.backref("feature_flag_overrides", lazy="dynamic"))
+    feature_flag = db.relationship("FeatureFlag", backref=db.backref("tenant_overrides", lazy="dynamic"))
+
+    __table_args__ = (
+        db.UniqueConstraint("tenant_id", "feature_flag_id", name="uq_tenant_feature_flag"),
+    )
 
 
 class DocPrompt(db.Model):

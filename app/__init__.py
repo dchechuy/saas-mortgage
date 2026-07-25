@@ -25,7 +25,7 @@ def create_app() -> Flask:
                           Attribute, DocPrompt, FeatureFlag, Integration, LlmModel,
                           LlmRequestLog, UserActivityLog, ApiRequestLog,
                           NavItem, NavSection,
-                          Permission, ReleaseNote, Role, User)
+                          Permission, ReleaseNote, Role, Tenant, TenantFeatureFlag, User)
 
     @login_manager.user_loader
     def load_user(user_id: str):
@@ -121,7 +121,8 @@ def create_app() -> Flask:
 def _seed_defaults() -> None:
     from sqlalchemy import inspect as sa_inspect
 
-    from .models import Attribute, DocPrompt, FeatureFlag, Integration, NavItem, NavSection, Permission, Role, User
+    from .models import (Attribute, DocPrompt, FeatureFlag, Integration, NavItem, NavSection,
+                          Permission, Role, Tenant, User)
 
     inspector = sa_inspect(db.engine)
     if not inspector.has_table("user"):
@@ -129,15 +130,28 @@ def _seed_defaults() -> None:
     existing_cols = {c["name"] for c in inspector.get_columns("user")}
     if "updated_at" not in existing_cols:
         return
+    if "tenant_id" not in existing_cols:
+        return
     if inspector.has_table("integration"):
         integration_cols = {c["name"] for c in inspector.get_columns("integration")}
         if "use_case" not in integration_cols:
+            return
+        if "tenant_id" not in integration_cols:
             return
     if not inspector.has_table("feature_flag"):
         return
     if not inspector.has_table("nav_section"):
         return
     if not inspector.has_table("doc_prompt"):
+        return
+    if not inspector.has_table("tenant"):
+        return
+
+    cofficiency = Tenant.query.filter_by(slug="cofficiency").first()
+    advantagefirst = Tenant.query.filter_by(slug="advantagefirst").first()
+    if not cofficiency or not advantagefirst:
+        # Tenant seed rows are inserted by the tenant migration itself; if they
+        # aren't there yet, the schema isn't fully migrated — don't race it.
         return
 
     admin_role = Role.query.filter_by(name="admin").first()
@@ -169,6 +183,7 @@ def _seed_defaults() -> None:
             first_name="System",
             last_name="Administrator",
             must_change_password=True,
+            tenant_id=cofficiency.id,
         )
         admin_user.set_password("Changeme-123")
         db.session.add(admin_user)
@@ -179,9 +194,13 @@ def _seed_defaults() -> None:
         ("Workflow", "Pilot", "Early prototype or validation workflow"),
     ]
     for category, name, description in default_attributes:
-        exists = Attribute.query.filter_by(category=category, name=name).first()
+        exists = Attribute.query.filter_by(
+            tenant_id=advantagefirst.id, category=category, name=name
+        ).first()
         if not exists:
-            db.session.add(Attribute(category=category, name=name, description=description))
+            db.session.add(Attribute(
+                tenant_id=advantagefirst.id, category=category, name=name, description=description
+            ))
 
     default_flags = [
         ("conversations",    "Conversations",       "Show the Conversations page under AI Agents"),

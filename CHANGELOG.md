@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-07-24] - Tenant Separation Phase 1: schema and safe migration
+- app/models.py: added `Tenant` and `TenantFeatureFlag` models; added `tenant_id`/`last_active_tenant_id` to `User`; added required `tenant_id` to `LlmModel`, `Attribute`, `Integration`, `AiAgent`, `AgentConversation`, `LlmRequestLog`, `UserActivityLog`, `ApiRequestLog`; converted `LlmModel`/`Attribute`/`Integration` uniqueness to tenant-relative
+- migrations/versions/7f7733a2f7d0_...: hand-written migration — creates `tenant`, seeds protected Cofficiency + AdvantageFirst, backfills existing `admin` user to Cofficiency (remembered tenant AdvantageFirst) and every other user/operational record/historical log to AdvantageFirst, replaces global uniqueness with tenant-relative constraints, makes tenant columns non-null; includes a full downgrade
+- app/__init__.py: seed guards now wait for the tenant schema and seeded Cofficiency/AdvantageFirst rows before running; fresh-install admin seeds to Cofficiency, default attributes seed to AdvantageFirst
+- tests/: added migration/model test suite (10 cases) covering tenant seeding, historical ownership backfill, non-null enforcement, tenant-relative uniqueness, and relationship loading; added pytest to requirements.txt
+- No tenant switcher or tenant-aware route behavior yet — that's Phase 2+
+
 ## [2026-06-02] - Permissions: Own/All scope for Conversations + View/Edit distinction
 - app/models.py: added `scope` column (own/all) to Permission model; added get_scope() helper to Role
 - app/access.py: added get_user_scope() helper
