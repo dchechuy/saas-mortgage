@@ -11,7 +11,7 @@ from datetime import datetime
 
 import requests as http_requests
 
-from .activity_logger import log_activity
+from .activity_logger import log_activity, reraise_if_testing
 from .crypto import decrypt_value
 from .extensions import db
 from .models import LlmModel, LlmRequestLog, ReleaseNote, User
@@ -76,8 +76,15 @@ def _call_llm(system: str, user_msg: str, llm_model: LlmModel,
 
     def _log(status="success", prompt_tokens=None, completion_tokens=None,
              total_tokens=None, error_message=None):
+        from .tenant_context import get_active_tenant_id
+
         latency_ms = int((time.time() - started) * 1000)
+        acting_user = db.session.get(User, user_id) if user_id else None
+        tenant_id = get_active_tenant_id(acting_user)
+        if tenant_id is None:
+            return
         entry = LlmRequestLog(
+            tenant_id=tenant_id,
             model_id=llm_model.id,
             model_name=llm_model.name,
             use_case="release_notes",
@@ -93,6 +100,7 @@ def _call_llm(system: str, user_msg: str, llm_model: LlmModel,
             db.session.commit()
         except Exception:
             db.session.rollback()
+            reraise_if_testing()
 
     try:
         resp = http_requests.post(
@@ -263,11 +271,13 @@ def create_release(
     if stale_drafts:
         db.session.flush()
 
-    # Get default or first active chat model
+    # Get default or first active chat model for the active tenant
+    from .tenant_context import get_active_tenant_id
+    tenant_id = get_active_tenant_id()
     model = (
-        LlmModel.query.filter_by(is_default=True, is_active=True).first()
-        or LlmModel.query.filter_by(is_active=True, model_type="chat").first()
-        or LlmModel.query.filter_by(is_active=True).first()
+        LlmModel.query.filter_by(tenant_id=tenant_id, is_default=True, is_active=True).first()
+        or LlmModel.query.filter_by(tenant_id=tenant_id, is_active=True, model_type="chat").first()
+        or LlmModel.query.filter_by(tenant_id=tenant_id, is_active=True).first()
     )
     if not model:
         raise RuntimeError("No active AI model configured. Add one in System Config → Models.")

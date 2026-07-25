@@ -5,12 +5,13 @@ from flask import (Blueprint, Response, abort, flash, jsonify, redirect,
                    render_template, request, stream_with_context, url_for)
 from flask_login import current_user, login_required
 
-from ..access import get_user_scope, permission_required
-from ..activity_logger import log_activity
+from ..access import feature_required, get_user_scope, permission_required
+from ..activity_logger import log_activity, reraise_if_testing
 from ..crypto import decrypt_value
 from ..extensions import db
 from sqlalchemy import func
 from ..models import AgentConversation, AgentMessage, AiAgent, ApiRequestLog, Integration, User
+from ..tenant_context import get_active_tenant_id, require_tenant_record
 
 agents_bp = Blueprint("agents", __name__, url_prefix="/agents")
 
@@ -52,16 +53,29 @@ def _upload_attachment_to_skunkbox(integration, file_storage) -> dict:
 
 
 def _get_docs_integration():
-    """Return the first active Documents integration, or None."""
-    return Integration.query.filter_by(use_case="Documents", is_active=True).first()
+    """Return the active tenant's first active Documents integration, or None."""
+    return Integration.query.filter_by(
+        tenant_id=get_active_tenant_id(), use_case="Documents", is_active=True
+    ).first()
 
 
 def _log_api(integration, endpoint: str, method: str,
              status_code: int = None, latency_ms: int = None,
              error_message: str = None) -> None:
-    """Write one row to ApiRequestLog. Never raises."""
+    """Write one row to ApiRequestLog. Never raises.
+
+    Attributed to the integration's own owning tenant rather than
+    re-resolving "whatever is active right now" — every call site already
+    passes a same-tenant integration for the conversation/doc it's acting on,
+    and this keeps the log tied to the resource actually called even if a
+    future caller's active-tenant context were ever inconsistent.
+    """
+    tenant_id = integration.tenant_id
+    if tenant_id is None:
+        return
     try:
         db.session.add(ApiRequestLog(
+            tenant_id=tenant_id,
             integration_id=integration.id,
             integration_name=integration.name,
             endpoint=endpoint,
@@ -73,6 +87,7 @@ def _log_api(integration, endpoint: str, method: str,
         db.session.commit()
     except Exception:
         db.session.rollback()
+        reraise_if_testing()
 
 
 def _call_skunkbox_get(integration, path: str, params: dict = None) -> dict:
@@ -162,13 +177,17 @@ def _call_skunkbox(integration, skunkbox_agent_id: int,
 @agents_bp.route("/")
 @login_required
 @permission_required("conversations", "view")
+@feature_required("conversations")
 def list_conversations():
+    active_tenant_id = get_active_tenant_id()
+
     # ── Auto-delete empty conversations (no messages sent, older than 30 min) ──
     from datetime import datetime as _dt, timedelta as _td
     cutoff = _dt.utcnow() - _td(minutes=30)
     has_msg_subq = db.session.query(AgentMessage.conversation_id).distinct()
     (AgentConversation.query
      .filter(
+         AgentConversation.tenant_id == active_tenant_id,
          AgentConversation.user_id == current_user.id,
          AgentConversation.id.notin_(has_msg_subq),
          AgentConversation.created_at < cutoff,
@@ -177,13 +196,18 @@ def list_conversations():
     db.session.commit()
 
     # ── Active agents ordered by most recently used by this user ────────────
-    ai_agents = AiAgent.query.filter_by(is_active=True).order_by(AiAgent.name).all()
+    ai_agents = (
+        AiAgent.query
+        .filter_by(tenant_id=active_tenant_id, is_active=True)
+        .order_by(AiAgent.name)
+        .all()
+    )
     last_used = dict(
         db.session.query(
             AgentConversation.ai_agent_id,
             func.max(AgentConversation.updated_at),
         )
-        .filter_by(user_id=current_user.id)
+        .filter_by(tenant_id=active_tenant_id, user_id=current_user.id)
         .group_by(AgentConversation.ai_agent_id)
         .all()
     )
@@ -220,7 +244,11 @@ def list_conversations():
     conv_q = (
         AgentConversation.query
         .join(AiAgent, AiAgent.id == AgentConversation.ai_agent_id)
-        .filter(AgentConversation.is_archived == False, AiAgent.is_active == True)
+        .filter(
+            AgentConversation.tenant_id == active_tenant_id,
+            AgentConversation.is_archived == False,
+            AiAgent.is_active == True,
+        )
     )
     if tab == "all":
         if f_agent_ids:
@@ -241,7 +269,7 @@ def list_conversations():
     conversations = conv_q.order_by(AgentConversation.updated_at.desc()).all()
 
     all_users = (
-        User.query.filter_by(is_active=True)
+        User.query.filter_by(tenant_id=active_tenant_id, is_active=True)
         .order_by(User.first_name, User.last_name, User.username)
         .all()
     )
@@ -272,6 +300,7 @@ def list_conversations():
 @agents_bp.route("/new", methods=["POST"])
 @login_required
 @permission_required("conversations", "edit")
+@feature_required("conversations")
 def new_conversation():
     agent_id = request.form.get("agent_id", "").strip()
     if not agent_id:
@@ -281,10 +310,12 @@ def new_conversation():
     agent = db.session.get(AiAgent, int(agent_id))
     if not agent or not agent.is_active:
         abort(404)
+    require_tenant_record(agent)
 
     initial_message = request.form.get("initial_message", "").strip()
 
     conv = AgentConversation(
+        tenant_id=agent.tenant_id,
         ai_agent_id=agent.id,
         user_id=current_user.id,
         title=initial_message[:80] if initial_message else f"Conversation with {agent.name}",
@@ -314,8 +345,10 @@ def new_conversation():
 @agents_bp.route("/<int:conversation_id>")
 @login_required
 @permission_required("conversations", "view")
+@feature_required("conversations")
 def view_conversation(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
+    require_tenant_record(conv)
     if conv.user_id != current_user.id:
         if current_user.is_admin() or get_user_scope("conversations") == "all":
             pass  # allowed
@@ -378,8 +411,11 @@ def view_conversation(conversation_id):
 @agents_bp.route("/<int:conversation_id>/send", methods=["POST"])
 @login_required
 @permission_required("conversations", "edit")
+@feature_required("conversations")
 def send_message(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
+    if conv.tenant_id != get_active_tenant_id():
+        return jsonify({"ok": False, "error": "Not found"}), 404
     if conv.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"ok": False, "error": "Forbidden"}), 403
 
@@ -495,8 +531,11 @@ def send_message(conversation_id):
 @agents_bp.route("/<int:conversation_id>/attachments", methods=["POST"])
 @login_required
 @permission_required("conversations", "edit")
+@feature_required("conversations")
 def upload_attachment(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
+    if conv.tenant_id != get_active_tenant_id():
+        return jsonify({"ok": False, "error": "Not found"}), 404
     if conv.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"ok": False, "error": "Forbidden"}), 403
 
@@ -528,9 +567,13 @@ def upload_attachment(conversation_id):
 @agents_bp.route("/attachments/<int:skunkbox_attachment_id>/download")
 @login_required
 @permission_required("conversations", "view")
+@feature_required("conversations")
 def download_attachment(skunkbox_attachment_id):
     """Proxy a file download from skunkBOX.
-    Security: verify the current user owns a conversation containing this attachment.
+    Security: verify the current user owns a conversation containing this
+    attachment, *within the active tenant* — a Cofficiency user who switches
+    tenants must not still be able to pull a previous tenant's attachment
+    through an old URL just because they were its actor there too.
     """
     from ..models import MessageAttachment
 
@@ -541,6 +584,7 @@ def download_attachment(skunkbox_attachment_id):
         .filter(
             MessageAttachment.skunkbox_attachment_id == skunkbox_attachment_id,
             AgentConversation.user_id == current_user.id,
+            AgentConversation.tenant_id == get_active_tenant_id(),
         )
         .first()
     )
@@ -585,6 +629,7 @@ def download_attachment(skunkbox_attachment_id):
 @agents_bp.route("/learning-center")
 @login_required
 @permission_required("learning_center", "view")
+@feature_required("learning_center")
 def learning_center():
     page       = request.args.get("page", 1, type=int)
     active_tab = request.args.get("tab", "all")   # "all" or str(collection_id)
@@ -657,6 +702,7 @@ def learning_center():
 @agents_bp.route("/learning-center/<doc_id>")
 @login_required
 @permission_required("learning_center", "view")
+@feature_required("learning_center")
 def learning_center_doc(doc_id):
     integration = _get_docs_integration()
     doc, error = None, None
@@ -688,6 +734,7 @@ def learning_center_doc(doc_id):
 @agents_bp.route("/learning-center/<doc_id>/file")
 @login_required
 @permission_required("learning_center", "view")
+@feature_required("learning_center")
 def learning_center_file(doc_id):
     """Proxy the raw file from skunkBOX so the browser can display it inline.
     Tries several common download URL patterns in order."""
@@ -740,8 +787,11 @@ def _proxy_error(message: str):
 @agents_bp.route("/<int:conversation_id>/favorite", methods=["POST"])
 @login_required
 @permission_required("conversations", "view")
+@feature_required("conversations")
 def toggle_favorite(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
+    if conv.tenant_id != get_active_tenant_id():
+        return jsonify({"ok": False, "error": "Not found"}), 404
     if conv.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"ok": False, "error": "Forbidden"}), 403
     conv.is_favorite = not conv.is_favorite
@@ -752,8 +802,10 @@ def toggle_favorite(conversation_id):
 @agents_bp.route("/<int:conversation_id>/archive", methods=["POST"])
 @login_required
 @permission_required("conversations", "edit")
+@feature_required("conversations")
 def archive_conversation(conversation_id):
     conv = db.get_or_404(AgentConversation, conversation_id)
+    require_tenant_record(conv)
     if conv.user_id != current_user.id and not current_user.is_admin():
         abort(403)
     conv.is_archived = True

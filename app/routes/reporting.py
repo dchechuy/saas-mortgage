@@ -8,6 +8,7 @@ from sqlalchemy import func
 from ..activity_logger import ACTION_LABELS
 from ..extensions import db
 from ..models import ApiRequestLog, Attribute, Integration, LlmModel, LlmRequestLog, ReleaseNote, Role, User, UserActivityLog
+from ..tenant_context import get_active_tenant_id
 
 reporting_bp = Blueprint("reporting", __name__, url_prefix="/reporting")
 
@@ -36,12 +37,14 @@ def _date_range():
 def index():
     _admin_required()
     active_tab = request.args.get("tab", "dashboard")
+    active_tenant_id = get_active_tenant_id()
 
     # ── LLM Requests tab ────────────────────────────────────────────────────
     llm_date_from, llm_date_to = _date_range()
     llm_page = request.args.get("page", 1, type=int)
 
     llm_q = LlmRequestLog.query.filter(
+        LlmRequestLog.tenant_id == active_tenant_id,
         LlmRequestLog.created_at >= datetime(llm_date_from.year, llm_date_from.month, llm_date_from.day),
         LlmRequestLog.created_at <= datetime(llm_date_to.year, llm_date_to.month, llm_date_to.day, 23, 59, 59),
     )
@@ -57,10 +60,12 @@ def index():
     llm_total      = llm_q.count()
     llm_errors     = llm_q.filter(LlmRequestLog.status == "error").count()
     llm_error_rate = round(llm_errors / llm_total * 100, 1) if llm_total else 0.0
-    llm_avg_lat    = int(db.session.query(func.avg(LlmRequestLog.latency_ms))
+    # Aggregates derive from llm_q itself so they share its tenant/date/filter
+    # predicates — never calculated globally while the list is tenant-filtered.
+    llm_avg_lat    = int(llm_q.with_entities(func.avg(LlmRequestLog.latency_ms))
                          .filter(LlmRequestLog.latency_ms.isnot(None))
                          .scalar() or 0)
-    llm_total_tok  = db.session.query(func.sum(LlmRequestLog.total_tokens)).scalar() or 0
+    llm_total_tok  = llm_q.with_entities(func.sum(LlmRequestLog.total_tokens)).scalar() or 0
 
     llm_pagination = (
         llm_q.order_by(LlmRequestLog.created_at.desc())
@@ -73,7 +78,11 @@ def index():
     act_user_id = request.args.get("act_user_id", type=int)
     act_action  = request.args.get("act_action", "").strip() or None
 
+    # Filtered by the event's own tenant_id, not the actor's home tenant — a
+    # Cofficiency actor's activity belongs to whichever tenant was active when
+    # they performed it, which can differ from their (Cofficiency) home tenant.
     act_q = UserActivityLog.query.filter(
+        UserActivityLog.tenant_id == active_tenant_id,
         UserActivityLog.created_at >= datetime(act_date_from.year, act_date_from.month, act_date_from.day),
         UserActivityLog.created_at <= datetime(act_date_to.year, act_date_to.month, act_date_to.day, 23, 59, 59),
     )
@@ -104,7 +113,11 @@ def index():
     api_page_num = request.args.get("api_page", 1, type=int)
     api_integ_id = request.args.get("integration_id", type=int)
 
+    # Filtered by the log row's own stored tenant_id — never re-derived from
+    # the integration's *current* tenant or the actor, since either could
+    # change after the fact while the historical event's tenant must not.
     api_q = ApiRequestLog.query.filter(
+        ApiRequestLog.tenant_id == active_tenant_id,
         ApiRequestLog.created_at >= datetime(api_date_from.year, api_date_from.month, api_date_from.day),
         ApiRequestLog.created_at <= datetime(api_date_to.year, api_date_to.month, api_date_to.day, 23, 59, 59),
     )
@@ -114,7 +127,7 @@ def index():
     api_total       = api_q.count()
     api_errors      = api_q.filter(ApiRequestLog.status_code >= 400).count()
     api_error_rate  = round(api_errors / api_total * 100, 1) if api_total else 0.0
-    api_avg_lat     = int(db.session.query(func.avg(ApiRequestLog.latency_ms))
+    api_avg_lat     = int(api_q.with_entities(func.avg(ApiRequestLog.latency_ms))
                           .filter(ApiRequestLog.latency_ms.isnot(None))
                           .scalar() or 0)
 
@@ -136,7 +149,7 @@ def index():
             "avg_latency": llm_avg_lat,
             "total_tokens": llm_total_tok,
         },
-        llm_models=LlmModel.query.order_by(LlmModel.name).all(),
+        llm_models=LlmModel.query.filter_by(tenant_id=active_tenant_id).order_by(LlmModel.name).all(),
         llm_filters={
             "date_from": llm_date_from.isoformat(),
             "date_to":   llm_date_to.isoformat(),
@@ -151,7 +164,7 @@ def index():
             "active_users": act_active_users,
             "top_action":   top_action,
         },
-        all_users=User.query.order_by(User.username).all(),
+        all_users=User.query.filter_by(tenant_id=active_tenant_id).order_by(User.username).all(),
         act_filters={
             "date_from": act_date_from.isoformat(),
             "date_to":   act_date_to.isoformat(),
@@ -168,19 +181,20 @@ def index():
             "error_rate":  api_error_rate,
             "avg_latency": api_avg_lat,
         },
-        integrations=Integration.query.order_by(Integration.name).all(),
+        integrations=Integration.query.filter_by(tenant_id=active_tenant_id).order_by(Integration.name).all(),
         api_filters={
             "date_from":      api_date_from.isoformat(),
             "date_to":        api_date_to.isoformat(),
             "integration_id": api_integ_id,
         },
-        # Dashboard tab
+        # Dashboard tab — same active-tenant scoping as main.dashboard; roles
+        # and release notes stay global.
         dash_stats={
-            "users":        User.query.count(),
+            "users":        User.query.filter_by(tenant_id=active_tenant_id).count(),
             "roles":        Role.query.count(),
-            "models":       LlmModel.query.count(),
-            "integrations": Integration.query.count(),
-            "attributes":   Attribute.query.count(),
+            "models":       LlmModel.query.filter_by(tenant_id=active_tenant_id).count(),
+            "integrations": Integration.query.filter_by(tenant_id=active_tenant_id).count(),
+            "attributes":   Attribute.query.filter_by(tenant_id=active_tenant_id).count(),
             "releases":     ReleaseNote.query.count(),
         },
         recent_releases=ReleaseNote.query.order_by(ReleaseNote.created_at.desc()).limit(5).all(),

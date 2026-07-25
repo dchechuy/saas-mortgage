@@ -73,6 +73,31 @@
       <div class="header-user">
         {% if current_user.is_authenticated %}
 
+        {% if can_switch_tenants %}
+        <div class="dropdown tenant-switcher-wrap" style="margin-right:12px">
+          <button class="btn btn-secondary btn-sm dropdown-toggle" type="button"
+                  id="tenant-switcher-btn" data-bs-toggle="dropdown" aria-expanded="false"
+                  title="Switch active tenant workspace">
+            {{ icon('building', 'icon') }}
+            <span>{{ active_tenant.name if active_tenant else 'Cofficiency' }}</span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tenant-switcher-btn">
+            {% for t in switchable_tenants %}
+            <li>
+              <form method="post" action="{{ url_for('tenants.switch_tenant') }}" style="margin:0">
+                <input type="hidden" name="tenant_id" value="{{ t.id }}">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="dropdown-item{{ ' active' if active_tenant and t.id == active_tenant.id else '' }}">
+                  {{ t.name }}
+                  {% if active_tenant and t.id == active_tenant.id %}<i class="fa-solid fa-check" style="float:right"></i>{% endif %}
+                </button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
         <div class="user-menu-wrap" id="user-menu-wrap">
 
           {# ── Trigger: avatar circle only ── #}

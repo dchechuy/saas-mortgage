@@ -13,9 +13,10 @@ from pathlib import Path
 
 import requests as http_requests
 
+from .activity_logger import reraise_if_testing
 from .crypto import decrypt_value
 from .extensions import db
-from .models import LlmModel, LlmRequestLog
+from .models import LlmModel, LlmRequestLog, User
 
 log = logging.getLogger(__name__)
 
@@ -167,10 +168,13 @@ def _format_routes(route_summaries: dict) -> str:
 # ── LLM call ─────────────────────────────────────────────────────
 
 def _get_model() -> LlmModel:
+    from .tenant_context import get_active_tenant_id
+
+    tenant_id = get_active_tenant_id()
     return (
-        LlmModel.query.filter_by(is_default=True, is_active=True).first()
-        or LlmModel.query.filter_by(is_active=True, model_type="chat").first()
-        or LlmModel.query.filter_by(is_active=True).first()
+        LlmModel.query.filter_by(tenant_id=tenant_id, is_default=True, is_active=True).first()
+        or LlmModel.query.filter_by(tenant_id=tenant_id, is_active=True, model_type="chat").first()
+        or LlmModel.query.filter_by(tenant_id=tenant_id, is_active=True).first()
     )
 
 
@@ -181,8 +185,15 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
 
     def _log(status="success", prompt_tokens=None, completion_tokens=None,
              total_tokens=None, error_message=None):
+        from .tenant_context import get_active_tenant_id
+
         latency_ms = int((time.time() - started) * 1000)
+        acting_user = db.session.get(User, user_id) if user_id else None
+        tenant_id = get_active_tenant_id(acting_user)
+        if tenant_id is None:
+            return
         entry = LlmRequestLog(
+            tenant_id=tenant_id,
             model_id=llm_model.id,
             model_name=llm_model.name,
             use_case="doc_generation",
@@ -198,6 +209,7 @@ def _call_llm(prompt: str, llm_model: LlmModel, user_id: int = None) -> str:
             db.session.commit()
         except Exception:
             db.session.rollback()
+            reraise_if_testing()
 
     try:
         resp = http_requests.post(

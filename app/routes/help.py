@@ -9,7 +9,7 @@ from flask import (Blueprint, abort, current_app, flash, jsonify,
                    redirect, render_template, request, url_for)
 from flask_login import current_user, login_required
 
-from ..access import permission_required
+from ..access import feature_required, permission_required
 from ..activity_logger import log_activity
 from ..extensions import db
 from ..models import ReleaseNote, next_version
@@ -401,6 +401,7 @@ def user_manual():
 @help_bp.route("/architecture")
 @login_required
 @permission_required("help", "view")
+@feature_required("system_overview")
 def architecture():
     meta = PAGE_META["architecture"]
     return render_template(
@@ -438,10 +439,12 @@ def improve_doc_prompt(doc_key):
     row = DocPrompt.query.filter_by(key=doc_key).first()
     current_prompt = row.prompt_text if row else DEFAULT_PROMPTS[doc_key]["text"]
 
-    # Pick the active LLM model
+    # Pick the active tenant's active LLM model
+    from ..tenant_context import get_active_tenant_id
+    tenant_id = get_active_tenant_id()
     llm_model = (
-        LlmModel.query.filter_by(is_default=True, is_active=True).first()
-        or LlmModel.query.filter_by(is_active=True).first()
+        LlmModel.query.filter_by(tenant_id=tenant_id, is_default=True, is_active=True).first()
+        or LlmModel.query.filter_by(tenant_id=tenant_id, is_active=True).first()
     )
     if not llm_model:
         return jsonify({"ok": False, "error": "No active AI model configured"}), 500
@@ -541,6 +544,7 @@ def apply_improved_prompt(doc_key):
 @help_bp.route("/dependencies")
 @login_required
 @permission_required("help", "view")
+@feature_required("system_overview")
 def dependencies():
     meta = PAGE_META["dependencies"]
     return render_template(

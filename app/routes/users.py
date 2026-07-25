@@ -8,6 +8,7 @@ from ..activity_logger import log_activity
 from ..extensions import db
 from ..models import Role, User
 from ..page_registry import PAGES
+from ..tenant_context import get_active_tenant, require_tenant_record
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
 
@@ -22,15 +23,21 @@ def _role_names() -> list[str]:
 @login_required
 @permission_required("users", "view")
 def list_users():
-    users = User.query.order_by(User.username).all()
+    active_tenant = get_active_tenant()
+    active_tenant_id = active_tenant.id if active_tenant else None
+    users = User.query.filter_by(tenant_id=active_tenant_id).order_by(User.username).all()
     roles = Role.query.order_by(Role.is_system.desc(), Role.name).all()
-    user_counts = {role.name: User.query.filter_by(role=role.name, is_active=True).count() for role in roles}
+    user_counts = {
+        role.name: User.query.filter_by(tenant_id=active_tenant_id, role=role.name, is_active=True).count()
+        for role in roles
+    }
     return render_template(
         "users/list.html",
         users=users,
         roles=roles,
         user_counts=user_counts,
         pages=PAGES,
+        active_tenant=active_tenant,
         breadcrumbs=[
             {"label": "Home", "url": url_for("agents.list_conversations")},
             {"label": "User Management", "url": None},
@@ -44,12 +51,17 @@ def list_users():
 def add_user():
     roles = _role_names()
     if request.method == "POST":
+        # tenant_id is deliberately never read from the request — the new
+        # user's home tenant is always the server-resolved active tenant.
+        active_tenant = get_active_tenant()
         username = request.form.get("username", "").strip()
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
         role = request.form.get("role", "member")
 
-        if not username or not email or not password:
+        if not active_tenant or not active_tenant.is_active:
+            flash("Cannot add a user: no active tenant workspace is available.", "error")
+        elif not username or not email or not password:
             flash("Username, email, and password are required.", "error")
         elif role not in roles:
             flash("Invalid role selected.", "error")
@@ -64,6 +76,7 @@ def add_user():
                 role=role,
                 first_name=request.form.get("first_name", "").strip() or None,
                 last_name=request.form.get("last_name", "").strip() or None,
+                tenant_id=active_tenant.id,
             )
             user.set_password(password)
             db.session.add(user)
@@ -80,6 +93,7 @@ def add_user():
 @permission_required("users", "edit")
 def edit_user(user_id):
     user = db.get_or_404(User, user_id)
+    require_tenant_record(user)
     roles = _role_names()
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -145,6 +159,7 @@ def change_password():
 @permission_required("users", "edit")
 def toggle_user(user_id):
     user = db.get_or_404(User, user_id)
+    require_tenant_record(user)
     if user.id == current_user.id:
         flash("You cannot deactivate your own account.", "error")
     else:
@@ -192,6 +207,7 @@ def upload_avatar(user_id):
     if not current_user.is_admin():
         abort(403)
     user = db.get_or_404(User, user_id)
+    require_tenant_record(user)
     _save_avatar(user)
     return redirect(url_for("users.edit_user", user_id=user_id))
 

@@ -33,7 +33,9 @@ class User(UserMixin, db.Model):
     avatar = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     must_change_password = db.Column(db.Boolean, nullable=False, default=False)
-    # Immutable home tenant, assigned at creation. Route-level immutability enforcement is Phase 3.
+    # Immutable home tenant, assigned at creation. No route may update this column
+    # (enforced since Phase 3); correcting a user's tenant requires a controlled
+    # data migration, not ordinary UI.
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
     # Remembered active tenant for Cofficiency users; ignored for external users (Phase 2 resolves active tenant).
     last_active_tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=True)

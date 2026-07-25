@@ -38,6 +38,7 @@ def create_app() -> Flask:
     from .routes.models import models_bp
     from .routes.permissions import permissions_bp
     from .routes.reporting import reporting_bp
+    from .routes.tenants import tenants_bp
     from .routes.users import users_bp
 
     app.register_blueprint(agents_bp)
@@ -47,6 +48,7 @@ def create_app() -> Flask:
     app.register_blueprint(models_bp)
     app.register_blueprint(permissions_bp)
     app.register_blueprint(reporting_bp)
+    app.register_blueprint(tenants_bp)
     app.register_blueprint(users_bp)
 
     @app.template_filter("md")
@@ -58,15 +60,36 @@ def create_app() -> Flask:
         return {"has_access": user_has_access}
 
     @app.context_processor
+    def inject_tenant_switcher():
+        """Expose the active tenant and switcher options to every template.
+        Only Cofficiency users get switcher data; external users always see
+        their single home tenant with no switch control."""
+        from .tenant_context import can_switch_tenants, get_active_tenant
+
+        if not current_user.is_authenticated:
+            return {"active_tenant": None, "can_switch_tenants": False, "switchable_tenants": []}
+
+        switchable = can_switch_tenants()
+        tenants = Tenant.query.filter_by(is_active=True).order_by(Tenant.name).all() if switchable else []
+        return {
+            "active_tenant": get_active_tenant(),
+            "can_switch_tenants": switchable,
+            "switchable_tenants": tenants,
+        }
+
+    @app.context_processor
     def inject_feature_flags():
-        """Make feature flag states available in every template as `flag_<key>`.
-        Defaults all known flags to True when the table doesn't exist yet,
-        so a pending migration never hides UI from users."""
+        """Make effective (tenant-override-aware) feature flag states available
+        in every template as `flag_<key>`. Defaults all known flags to True
+        when the table doesn't exist yet, so a pending migration never hides
+        UI from users."""
+        from .feature_flags import effective_feature_flags
+
         _KNOWN_FLAGS = ["conversations", "learning_center", "ai_agents_section", "system_overview"]
         flags = {f"flag_{k}": True for k in _KNOWN_FLAGS}
         try:
-            for f in FeatureFlag.query.all():
-                flags[f"flag_{f.key}"] = f.is_enabled
+            for key, enabled in effective_feature_flags().items():
+                flags[f"flag_{key}"] = enabled
         except Exception:
             pass
         return flags
@@ -75,12 +98,14 @@ def create_app() -> Flask:
     def inject_nav():
         """Build the sidebar nav structure from NavSection / NavItem DB records.
         Falls back gracefully if the tables don't exist yet."""
+        from .feature_flags import effective_feature_flags
+        from .tenant_context import is_cofficiency_user
+
         nav = []
         try:
             flag_cache: dict = {}
             try:
-                for f in FeatureFlag.query.all():
-                    flag_cache[f.key] = f.is_enabled
+                flag_cache = effective_feature_flags()
             except Exception:
                 pass
 
@@ -92,6 +117,8 @@ def create_app() -> Flask:
                         continue
                     ff = reg.get("feature_flag")
                     if ff and not flag_cache.get(ff, True):
+                        continue
+                    if reg.get("cofficiency_only") and not is_cofficiency_user():
                         continue
                     if not user_has_access(reg["permission_slug"], "view"):
                         continue

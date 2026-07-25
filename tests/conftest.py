@@ -96,11 +96,120 @@ def legacy_db(tmp_path):
 
 
 @pytest.fixture()
-def app(legacy_db):
-    """A Flask app bound to the legacy database, migrated the rest of the way
-    to head (applying the tenant migration on top of realistic pre-existing
-    data) inside the same app context the migration itself will run under."""
+def migrated_db(legacy_db):
+    """legacy_db migrated the rest of the way to head — applies every
+    migration up to and including the tenant ones on top of realistic
+    pre-existing data."""
     flask_app = _bare_app(legacy_db)
     with flask_app.app_context():
         fm_upgrade(directory=MIGRATIONS_DIR, revision="head")
+    return legacy_db
+
+
+@pytest.fixture()
+def app(migrated_db):
+    """A bare Flask app (no blueprints, login manager, or seeding) bound to
+    the migrated database — used by Phase 1 model/migration tests that only
+    need the ORM."""
+    flask_app = _bare_app(migrated_db)
+    with flask_app.app_context():
         yield flask_app
+
+
+@pytest.fixture()
+def full_app(migrated_db, monkeypatch):
+    """The real application — blueprints, login manager, startup seeding —
+    bound to the migrated database. Used by Phase 2+ route/web-flow tests.
+
+    Patches config.Config.SQLALCHEMY_DATABASE_URI directly rather than the
+    DATABASE_URL env var: config.py reads the env var once at first import,
+    so a later env var change wouldn't reach create_app() if config had
+    already been imported by an earlier test in the same pytest session.
+
+    Deliberately does NOT wrap the yield in `with flask_app.app_context():`.
+    Flask reuses an already-active app context for the same app rather than
+    pushing a fresh one (see Flask's RequestContext.push()), so a persistent
+    outer context here would make every `client.post()`/`client.get()` in the
+    test share one `flask.g` — silently resurrecting stale per-request caches
+    (e.g. tenant_context's g-based active-tenant cache) across what should be
+    independent requests. Real requests never have this problem since nothing
+    holds a context open between them. Direct ORM access in test bodies
+    should open its own `with full_app.app_context():` block instead.
+    """
+    import config as config_module
+
+    monkeypatch.setattr(config_module.Config, "SQLALCHEMY_DATABASE_URI", f"sqlite:///{migrated_db}")
+
+    from app import create_app
+    flask_app = create_app()
+    flask_app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+    yield flask_app
+
+
+@pytest.fixture()
+def client(full_app):
+    return full_app.test_client()
+
+
+# ── Shared helpers for Phase 2+ route/web-flow tests ────────────────────────
+
+def set_password(app, username, password):
+    """Set a known password on a fixture user, bypassing must_change_password."""
+    from app.models import User
+
+    with app.app_context():
+        user = User.query.filter_by(username=username).one()
+        user.set_password(password)
+        user.must_change_password = False
+        db.session.commit()
+        return user.id
+
+
+def login(client, username, password):
+    return client.post("/login", data={"username": username, "password": password}, follow_redirects=True)
+
+
+def ensure_baseline_permissions(app, role_name="member"):
+    """The `jane` fixture user's role ('member') has no matching Role row by
+    default, which resolves to no_access on every page — including
+    'dashboard', the post-login landing page. That's an unrelated pre-existing
+    gap in the permission system (not something Tenant Separation should fix),
+    so tests that log in as a non-admin fixture user grant it baseline view
+    access here, mirroring what a real non-admin role would have."""
+    from app.models import Permission, Role
+    from app.page_registry import PAGES
+
+    with app.app_context():
+        role = Role.query.filter_by(name=role_name).first()
+        if not role:
+            role = Role(name=role_name, is_system=False)
+            db.session.add(role)
+            db.session.flush()
+        for page in PAGES:
+            if not Permission.query.filter_by(role_id=role.id, page_slug=page["slug"]).first():
+                db.session.add(Permission(role_id=role.id, page_slug=page["slug"], access_level="view"))
+        db.session.commit()
+
+
+def create_tenant(app, name, slug, is_active=True):
+    from app.models import Tenant
+
+    with app.app_context():
+        tenant = Tenant(name=name, slug=slug, is_active=is_active, is_protected=False)
+        db.session.add(tenant)
+        db.session.commit()
+        return tenant.id
+
+
+def create_user(app, username, tenant_id, role="member", password="Test-1234"):
+    from app.models import User
+
+    with app.app_context():
+        user = User(
+            username=username, email=f"{username}@example.com", role=role,
+            tenant_id=tenant_id, must_change_password=False,
+        )
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        return user.id

@@ -22,11 +22,21 @@ source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 # Edit .env — set SECRET_KEY and ENCRYPTION_KEY at minimum
-flask db upgrade          # creates all tables
+flask db upgrade          # creates all tables; also seeds the Cofficiency
+                          # and AdvantageFirst tenants (see "Tenants" below)
 python run.py             # seeds defaults on first startup, then serves on :5011
 ```
 
-Default admin: `admin` / `Changeme-123` (forced password change on first login)
+Default admin: `admin` / `Changeme-123` (forced password change on first login), home tenant Cofficiency, remembered active tenant AdvantageFirst.
+
+### Tenants
+
+The app is multi-tenant (see `docs/ARCHITECTURE.md` § Tenant isolation and
+`docs/prompts/Tenant Separation - PRD.md`). `flask db upgrade` seeds exactly
+two tenants on a fresh database: the protected `cofficiency` tenant and an
+`advantagefirst` tenant that owns all pre-existing sample/business data.
+Never create a real customer tenant until you've run every tenant-separation
+migration — check `flask db current` against the latest revision first.
 
 ---
 

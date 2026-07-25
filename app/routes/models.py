@@ -8,8 +8,10 @@ from ..access import permission_required, user_has_access
 from ..activity_logger import log_activity
 from ..crypto import encrypt_value
 from ..extensions import db
-from ..models import AgentConversation, AiAgent, Attribute, DocPrompt, FeatureFlag, Integration, LlmModel, NavItem, NavSection
+from ..models import (AgentConversation, AiAgent, Attribute, DocPrompt, FeatureFlag, Integration,
+                       LlmModel, NavItem, NavSection, TenantFeatureFlag)
 from ..page_registry import NAV_ITEMS
+from ..tenant_context import get_active_tenant, require_tenant_record
 
 _ALLOWED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
@@ -45,7 +47,10 @@ def list_models():
         flash("You do not have permission to access this page.", "error")
         return redirect(url_for("agents.list_conversations"))
 
-    all_integrations = Integration.query.order_by(
+    active_tenant = get_active_tenant()
+    active_tenant_id = active_tenant.id if active_tenant else None
+
+    all_integrations = Integration.query.filter_by(tenant_id=active_tenant_id).order_by(
         Integration.category, Integration.provider, Integration.name
     ).all() if (can_view_integrations or can_view_agents) else []
 
@@ -79,14 +84,36 @@ def list_models():
 
     from ..doc_generator import DEFAULT_PROMPTS
 
+    feature_flags_view = []
+    if can_view_flags:
+        overrides_by_flag_id = {}
+        if active_tenant:
+            overrides_by_flag_id = {
+                o.feature_flag_id: o
+                for o in TenantFeatureFlag.query.filter_by(tenant_id=active_tenant.id).all()
+            }
+        for flag in FeatureFlag.query.order_by(FeatureFlag.id).all():
+            override = overrides_by_flag_id.get(flag.id)
+            feature_flags_view.append({
+                "id":               flag.id,
+                "key":              flag.key,
+                "label":            flag.label,
+                "description":      flag.description,
+                "global_default":   flag.is_enabled,
+                "is_overridden":    override is not None,
+                "effective_enabled": override.is_enabled if override else flag.is_enabled,
+                "updated_at":       override.updated_at if override else flag.updated_at,
+            })
+
     return render_template(
         "models/list.html",
-        llm_models=LlmModel.query.order_by(LlmModel.name).all() if can_view_models else [],
-        attributes=Attribute.query.order_by(Attribute.category, Attribute.name).all() if can_view_attributes else [],
+        llm_models=LlmModel.query.filter_by(tenant_id=active_tenant_id).order_by(LlmModel.name).all() if can_view_models else [],
+        attributes=Attribute.query.filter_by(tenant_id=active_tenant_id).order_by(Attribute.category, Attribute.name).all() if can_view_attributes else [],
         integrations=all_integrations if can_view_integrations else [],
-        ai_agents=AiAgent.query.order_by(AiAgent.name).all() if can_view_agents else [],
+        ai_agents=AiAgent.query.filter_by(tenant_id=active_tenant_id).order_by(AiAgent.name).all() if can_view_agents else [],
         all_integrations=all_integrations,
-        feature_flags=FeatureFlag.query.order_by(FeatureFlag.id).all() if can_view_flags else [],
+        feature_flags=feature_flags_view,
+        active_tenant=active_tenant,
         can_view_models=can_view_models,
         can_view_attributes=can_view_attributes,
         can_view_integrations=can_view_integrations,
@@ -108,11 +135,45 @@ def list_models():
 @login_required
 @permission_required("models", "edit")
 def toggle_flag(flag_id):
+    """Set the active tenant's override for this flag. Never mutates the
+    global FeatureFlag catalogue row — that stays the shared default."""
     flag = db.get_or_404(FeatureFlag, flag_id)
+    active_tenant = get_active_tenant()
+    if not active_tenant:
+        flash("No active tenant workspace is available.", "error")
+        return redirect(_redirect_to_system_config("flags").location)
+
     # Checkbox is present in form data when checked, absent when unchecked
-    flag.is_enabled = bool(request.form.get("is_enabled"))
+    is_enabled = bool(request.form.get("is_enabled"))
+    override = TenantFeatureFlag.query.filter_by(
+        tenant_id=active_tenant.id, feature_flag_id=flag.id
+    ).first()
+    if override:
+        override.is_enabled = is_enabled
+    else:
+        db.session.add(TenantFeatureFlag(
+            tenant_id=active_tenant.id, feature_flag_id=flag.id, is_enabled=is_enabled
+        ))
     db.session.commit()
     log_activity(current_user, "flag.toggled", page="System Config")
+    flash(f"'{flag.label}' set to {'ON' if is_enabled else 'OFF'} for {active_tenant.name}.", "success")
+    return redirect(_redirect_to_system_config("flags").location)
+
+
+@models_bp.route("/flags/<int:flag_id>/reset", methods=["POST"])
+@login_required
+@permission_required("models", "edit")
+def reset_flag(flag_id):
+    """Remove the active tenant's override, reverting to the global default."""
+    flag = db.get_or_404(FeatureFlag, flag_id)
+    active_tenant = get_active_tenant()
+    if active_tenant:
+        TenantFeatureFlag.query.filter_by(
+            tenant_id=active_tenant.id, feature_flag_id=flag.id
+        ).delete()
+        db.session.commit()
+        log_activity(current_user, "flag.reset", page="System Config")
+        flash(f"'{flag.label}' reset to the global default for {active_tenant.name}.", "success")
     return redirect(_redirect_to_system_config("flags").location)
 
 
@@ -120,20 +181,26 @@ def toggle_flag(flag_id):
 @login_required
 @permission_required("models", "edit")
 def add_llm_model():
+    active_tenant = get_active_tenant()
+    if not active_tenant or not active_tenant.is_active:
+        flash("Cannot add a model: no active tenant workspace is available.", "error")
+        return _redirect_to_system_config()
+
     name = request.form.get("name", "").strip()
     if not name:
         flash("Model name is required.", "error")
         return _redirect_to_system_config()
 
-    if LlmModel.query.filter_by(name=name).first():
+    if LlmModel.query.filter_by(tenant_id=active_tenant.id, name=name).first():
         flash(f"Model '{name}' already exists.", "error")
         return _redirect_to_system_config()
 
     make_default = request.form.get("is_default") == "1"
     if make_default:
-        LlmModel.query.update({"is_default": False})
+        LlmModel.query.filter_by(tenant_id=active_tenant.id).update({"is_default": False})
 
     model = LlmModel(
+        tenant_id=active_tenant.id,
         name=name,
         provider=request.form.get("provider", "Azure OpenAI").strip() or "Azure OpenAI",
         deployment_name=request.form.get("deployment_name", "").strip(),
@@ -155,19 +222,22 @@ def add_llm_model():
 @permission_required("models", "edit")
 def update_llm_model(model_id):
     model = db.get_or_404(LlmModel, model_id)
+    require_tenant_record(model)
     name = request.form.get("name", "").strip()
     if not name:
         flash("Model name is required.", "error")
         return _redirect_to_system_config()
 
-    duplicate = LlmModel.query.filter(LlmModel.name == name, LlmModel.id != model.id).first()
+    duplicate = LlmModel.query.filter(
+        LlmModel.tenant_id == model.tenant_id, LlmModel.name == name, LlmModel.id != model.id
+    ).first()
     if duplicate:
         flash(f"Model '{name}' already exists.", "error")
         return _redirect_to_system_config()
 
     make_default = request.form.get("is_default") == "1"
     if make_default:
-        LlmModel.query.update({"is_default": False})
+        LlmModel.query.filter_by(tenant_id=model.tenant_id).update({"is_default": False})
 
     model.name = name
     model.provider = request.form.get("provider", "Azure OpenAI").strip() or "Azure OpenAI"
@@ -192,6 +262,7 @@ def update_llm_model(model_id):
 @permission_required("models", "edit")
 def toggle_llm_model(model_id):
     model = db.get_or_404(LlmModel, model_id)
+    require_tenant_record(model)
     model.is_active = not model.is_active
     db.session.commit()
     state = "activated" if model.is_active else "deactivated"
@@ -212,9 +283,13 @@ def batch_save_attributes():
     if not category:
         return jsonify({"success": False, "error": "Category name is required."})
 
+    active_tenant = get_active_tenant()
+    if not active_tenant or not active_tenant.is_active:
+        return jsonify({"success": False, "error": "No active tenant workspace is available."})
+
     for attr_id in deleted_ids:
         attr = db.session.get(Attribute, int(attr_id))
-        if attr and attr.category == category:
+        if attr and attr.category == category and attr.tenant_id == active_tenant.id:
             db.session.delete(attr)
 
     for v in values:
@@ -225,12 +300,14 @@ def batch_save_attributes():
         attr_id = v.get("id")
         if attr_id:
             attr = db.session.get(Attribute, int(attr_id))
-            if attr and attr.category == category:
+            if attr and attr.category == category and attr.tenant_id == active_tenant.id:
                 attr.name = name
                 attr.is_active = is_active
         else:
-            if not Attribute.query.filter_by(category=category, name=name).first():
-                db.session.add(Attribute(category=category, name=name))
+            if not Attribute.query.filter_by(
+                tenant_id=active_tenant.id, category=category, name=name
+            ).first():
+                db.session.add(Attribute(tenant_id=active_tenant.id, category=category, name=name))
 
     try:
         db.session.commit()
@@ -245,6 +322,11 @@ def batch_save_attributes():
 @login_required
 @permission_required("integrations", "edit")
 def add_integration():
+    active_tenant = get_active_tenant()
+    if not active_tenant or not active_tenant.is_active:
+        flash("Cannot add an integration: no active tenant workspace is available.", "error")
+        return _redirect_to_system_config("apis")
+
     name = request.form.get("name", "").strip()
     provider = request.form.get("provider", "").strip()
     category = request.form.get("category", "").strip()
@@ -252,11 +334,12 @@ def add_integration():
         flash("Integration name, provider, and category are required.", "error")
         return _redirect_to_system_config("apis")
 
-    if Integration.query.filter_by(name=name).first():
+    if Integration.query.filter_by(tenant_id=active_tenant.id, name=name).first():
         flash(f"Integration '{name}' already exists.", "error")
         return _redirect_to_system_config("apis")
 
     integration = Integration(
+        tenant_id=active_tenant.id,
         name=name,
         provider=provider,
         category=category,
@@ -281,6 +364,7 @@ def add_integration():
 @permission_required("integrations", "edit")
 def save_integration(integration_id):
     integration = db.get_or_404(Integration, integration_id)
+    require_tenant_record(integration)
 
     name = request.form.get("name", "").strip()
     provider = request.form.get("provider", "").strip()
@@ -289,7 +373,11 @@ def save_integration(integration_id):
         flash("Integration name, provider, and category are required.", "error")
         return _redirect_to_system_config("apis")
 
-    duplicate = Integration.query.filter(Integration.name == name, Integration.id != integration.id).first()
+    duplicate = Integration.query.filter(
+        Integration.tenant_id == integration.tenant_id,
+        Integration.name == name,
+        Integration.id != integration.id,
+    ).first()
     if duplicate:
         flash(f"Integration '{name}' already exists.", "error")
         return _redirect_to_system_config("apis")
@@ -316,6 +404,11 @@ def save_integration(integration_id):
 @login_required
 @permission_required("agents", "edit")
 def add_agent():
+    active_tenant = get_active_tenant()
+    if not active_tenant or not active_tenant.is_active:
+        flash("Cannot add an agent: no active tenant workspace is available.", "error")
+        return _redirect_to_system_config("agents")
+
     name = request.form.get("name", "").strip()
     integration_id = request.form.get("integration_id", "").strip()
     skunkbox_agent_id_raw = request.form.get("skunkbox_agent_id", "").strip()
@@ -328,11 +421,19 @@ def add_agent():
         flash("skunkBOX agent ID must be an integer.", "error")
         return _redirect_to_system_config("agents")
 
+    integration = Integration.query.filter_by(
+        id=int(integration_id), tenant_id=active_tenant.id
+    ).first()
+    if not integration:
+        flash("Select an integration that belongs to the active tenant.", "error")
+        return _redirect_to_system_config("agents")
+
     avatar_filename = _save_agent_avatar(request.files.get("avatar"))
     agent = AiAgent(
+        tenant_id=active_tenant.id,
         name=name,
         description=request.form.get("description", "").strip() or None,
-        integration_id=int(integration_id),
+        integration_id=integration.id,
         skunkbox_agent_id=skunkbox_agent_id,
         avatar_filename=avatar_filename,
         is_active=request.form.get("is_active", "1") == "1",
@@ -349,6 +450,7 @@ def add_agent():
 @permission_required("agents", "edit")
 def save_agent(agent_id):
     agent = db.get_or_404(AiAgent, agent_id)
+    require_tenant_record(agent)
     name = request.form.get("name", "").strip()
     integration_id = request.form.get("integration_id", "").strip()
     skunkbox_agent_id_raw = request.form.get("skunkbox_agent_id", "").strip()
@@ -361,10 +463,17 @@ def save_agent(agent_id):
         flash("skunkBOX agent ID must be an integer.", "error")
         return _redirect_to_system_config("agents")
 
+    integration = Integration.query.filter_by(
+        id=int(integration_id), tenant_id=agent.tenant_id
+    ).first()
+    if not integration:
+        flash("Select an integration that belongs to the active tenant.", "error")
+        return _redirect_to_system_config("agents")
+
     new_avatar = _save_agent_avatar(request.files.get("avatar"))
     agent.name = name
     agent.description = request.form.get("description", "").strip() or None
-    agent.integration_id = int(integration_id)
+    agent.integration_id = integration.id
     agent.skunkbox_agent_id = skunkbox_agent_id
     agent.is_active = request.form.get("is_active") == "1"
     if new_avatar:
@@ -381,13 +490,16 @@ def save_agent(agent_id):
 @permission_required("agents", "edit")
 def toggle_agent(agent_id):
     agent = db.get_or_404(AiAgent, agent_id)
+    require_tenant_record(agent)
     agent.is_active = not agent.is_active
 
     if not agent.is_active:
-        # Archive all active conversations for this agent
+        # Archive all active conversations for this agent (tenant_id repeated
+        # in the predicate for defense-in-depth, even though ai_agent_id
+        # alone can't match another tenant's conversations).
         archived = (
             AgentConversation.query
-            .filter_by(ai_agent_id=agent.id, is_archived=False)
+            .filter_by(ai_agent_id=agent.id, tenant_id=agent.tenant_id, is_archived=False)
             .update({"is_archived": True}, synchronize_session="fetch")
         )
     else:

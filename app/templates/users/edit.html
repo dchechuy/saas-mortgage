@@ -41,6 +41,13 @@
             {% endfor %}
           </select>
         </div>
+        {% if user %}
+        <div class="col-md-6">
+          <label class="form-label">Tenant</label>
+          <input type="text" class="form-control" value="{{ user.tenant.name if user.tenant else '' }}" disabled>
+          <div class="form-hint">A user's home tenant is set at creation and cannot be changed here.</div>
+        </div>
+        {% endif %}
       </div>
     </div>
     <div class="card-footer d-flex justify-content-end gap-2">

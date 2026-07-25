@@ -12,6 +12,7 @@ PAGES = [
     {"slug": "models", "label": "LLM Models"},
     {"slug": "integrations", "label": "Integrations"},
     {"slug": "agents", "label": "AI Agents"},
+    {"slug": "tenants", "label": "Tenant Management"},
 ]
 
 # Registry for nav items that can appear in the left sidebar.
@@ -70,6 +71,14 @@ NAV_ITEMS = {
         "active_endpoints": ["help.architecture", "help.dependencies"],
         "permission_slug":  "help",
         "feature_flag":     "system_overview",
+    },
+    "tenant_management": {
+        "label":            "Tenant Management",
+        "icon":             "building",
+        "endpoint":         "tenants.list_tenants",
+        "active_endpoints": ["tenants.list_tenants", "tenants.add_tenant", "tenants.edit_tenant"],
+        "permission_slug":  "tenants",
+        "cofficiency_only": True,
     },
 }
 

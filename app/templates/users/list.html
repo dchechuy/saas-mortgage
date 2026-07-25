@@ -13,6 +13,9 @@
     <div class="sb-page-header">
       <div>
         <h1 class="page-title">Users</h1>
+        {% if can_switch_tenants and active_tenant %}
+        <div class="text-secondary" style="font-size:13px;margin-top:2px">Showing users in {{ active_tenant.name }}</div>
+        {% endif %}
       </div>
       <div style="display:flex;align-items:center;gap:16px">
         <label class="toggle-switch" title="Show Inactive Users">

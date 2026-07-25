@@ -4,6 +4,13 @@
 {% block page_heading %}Administration{% endblock %}
 {% block content %}
 
+{% if can_switch_tenants and active_tenant %}
+<div class="text-secondary" style="font-size:13px;margin:-12px 0 16px">
+  Models, attributes, integrations, agents, and feature-flag overrides below apply to <strong>{{ active_tenant.name }}</strong>.
+  Sections and Help Prompts are shared across every tenant.
+</div>
+{% endif %}
+
 {# ── Top-level section tab strip ── #}
 {% set tab_count = (1 if can_view_agents else 0) + (1 if can_view_models else 0) + (1 if can_view_integrations else 0) + (1 if can_view_attributes else 0) + (1 if can_view_flags else 0) + 2 %}
 {% if tab_count > 1 %}
@@ -29,9 +36,9 @@
           onclick="switchTopTab('flags')">Feature Flags</button>
   {% endif %}
   <button class="tax-tab" id="top-tab-btn-sections" type="button"
-          onclick="switchTopTab('sections')">Sections</button>
+          onclick="switchTopTab('sections')">Sections (Global)</button>
   <button class="tax-tab" id="top-tab-btn-help-prompts" type="button"
-          onclick="switchTopTab('help-prompts')">Help Prompts</button>
+          onclick="switchTopTab('help-prompts')">Help Prompts (Global)</button>
 </div>
 {% endif %}
 
@@ -822,7 +829,11 @@
   <div class="sb-page-header">
     <div>
       <h1 class="page-title">Feature Flags</h1>
-      <p class="muted" style="margin:4px 0 0">Enable or disable features across the application.</p>
+      <p class="muted" style="margin:4px 0 0">
+        Global defaults, with the effective state for
+        <strong>{{ active_tenant.name if active_tenant else 'the active tenant' }}</strong> shown below.
+        Toggling here overrides that tenant only — it never changes the shared default.
+      </p>
     </div>
   </div>
 
@@ -833,7 +844,8 @@
           <tr>
             <th>Feature</th>
             <th>Description</th>
-            <th style="text-align:center">Status</th>
+            <th style="text-align:center">Global Default</th>
+            <th style="text-align:center">Effective for this Tenant</th>
             <th style="text-align:right">Last Updated</th>
             {% if has_access('models', 'edit') %}<th></th>{% endif %}
           </tr>
@@ -844,10 +856,22 @@
             <td style="font-weight:600;color:var(--text)">{{ flag.label }}</td>
             <td style="font-size:13px;color:var(--muted)">{{ flag.description or '—' }}</td>
             <td style="text-align:center">
-              {% if flag.is_enabled %}
+              {% if flag.global_default %}
               <span class="badge badge-active">ON</span>
               {% else %}
               <span class="badge badge-inactive">OFF</span>
+              {% endif %}
+            </td>
+            <td style="text-align:center">
+              {% if flag.effective_enabled %}
+              <span class="badge badge-active">ON</span>
+              {% else %}
+              <span class="badge badge-inactive">OFF</span>
+              {% endif %}
+              {% if flag.is_overridden %}
+              <span class="badge" style="background:var(--panel);border:1px solid var(--border);color:var(--muted);margin-left:4px">Overridden</span>
+              {% else %}
+              <span class="badge" style="background:var(--panel);border:1px solid var(--border);color:var(--muted);margin-left:4px">Inherited</span>
               {% endif %}
             </td>
             <td style="font-size:13px;color:var(--muted);text-align:right">
@@ -857,10 +881,17 @@
             </td>
             {% if has_access('models', 'edit') %}
             <td style="text-align:right">
-              <button type="button" class="btn btn-secondary btn-sm"
-                      onclick='openFlagModal({{ flag.id }}, {{ flag.label | tojson }}, {{ flag.description | tojson }}, {{ flag.is_enabled | tojson }})'>
-                Edit
-              </button>
+              <div class="btn-list justify-content-end flex-nowrap">
+                <button type="button" class="btn btn-secondary btn-sm"
+                        onclick='openFlagModal({{ flag.id }}, {{ flag.label | tojson }}, {{ flag.description | tojson }}, {{ flag.effective_enabled | tojson }})'>
+                  Edit
+                </button>
+                {% if flag.is_overridden %}
+                <form method="post" action="{{ url_for('models.reset_flag', flag_id=flag.id) }}" style="margin:0">
+                  <button type="submit" class="btn btn-secondary btn-sm" title="Revert to the global default">Reset</button>
+                </form>
+                {% endif %}
+              </div>
             </td>
             {% endif %}
           </tr>

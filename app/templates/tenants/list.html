@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+{% block title %}Tenant Management - saas-mortgage{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">Tenant Management</h1>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTenantModal">+ Add Tenant</button>
+  </div>
+</div>
+
+<div class="card">
+  {% if tenants %}
+  <div class="ds-table-shell">
+    <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Slug</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th class="w-1">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tenant in tenants %}
+        <tr>
+          <td>
+            <strong>{{ tenant.name }}</strong>
+            {% if tenant.is_protected %}
+            <span class="badge text-bg-azure-lt" style="margin-left:6px">Protected</span>
+            {% endif %}
+          </td>
+          <td class="text-secondary">{{ tenant.slug }}</td>
+          <td>
+            <span class="badge {{ 'text-bg-green-lt' if tenant.is_active else 'text-bg-secondary-lt' }}">
+              {{ 'Active' if tenant.is_active else 'Archived' }}
+            </span>
+          </td>
+          <td class="text-secondary">
+            <span class="local-time" data-utc="{{ tenant.created_at.isoformat() }}">{{ tenant.created_at.strftime('%b %d, %Y') }}</span>
+          </td>
+          <td>
+            <div class="btn-list justify-content-end flex-nowrap">
+              {% if not tenant.is_protected %}
+              <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#editTenantModal{{ tenant.id }}">Edit</button>
+              {% if tenant.is_active %}
+              <form id="archive-tenant-form-{{ tenant.id }}" method="post" action="{{ url_for('tenants.archive_tenant', tenant_id=tenant.id) }}" style="margin:0">
+                <button type="button" class="btn btn-secondary btn-sm"
+                        onclick="confirmAction('Archive Tenant', 'Archived tenants cannot be selected or receive new records. You can reactivate it later.', 'archive-tenant-form-{{ tenant.id }}', 'Archive', 'btn-danger')">
+                  Archive
+                </button>
+              </form>
+              {% else %}
+              <form method="post" action="{{ url_for('tenants.reactivate_tenant', tenant_id=tenant.id) }}" style="margin:0">
+                <button type="submit" class="btn btn-secondary btn-sm">Reactivate</button>
+              </form>
+              {% endif %}
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card-body">
+    {{ empty_state("No tenants yet", "Create the first customer tenant to start a POC or prototype workspace.", "building") }}
+  </div>
+  {% endif %}
+</div>
+
+{# ── Add Tenant modal ── #}
+<div class="modal modal-blur fade" id="addTenantModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('tenants.add_tenant') }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Tenant</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Tenant Name</label>
+            <input type="text" name="name" class="form-control" required maxlength="120" placeholder="e.g. Acme Corp">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Tenant</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ── Edit Tenant modals ── #}
+{% for tenant in tenants %}
+{% if not tenant.is_protected %}
+<div class="modal modal-blur fade" id="editTenantModal{{ tenant.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('tenants.edit_tenant', tenant_id=tenant.id) }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit {{ tenant.name }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Tenant Name</label>
+            <input type="text" name="name" class="form-control" required maxlength="120" value="{{ tenant.name }}">
+          </div>
+          <div class="mb-0">
+            <label class="form-label">Slug</label>
+            <input type="text" class="form-control" value="{{ tenant.slug }}" disabled>
+            <div class="form-hint">The slug is a stable identifier and cannot be changed after creation.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

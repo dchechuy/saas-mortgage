@@ -5,13 +5,66 @@ This SaaS platform provides a web-based interface to interact with AI Agents, ma
 
 Who can use what is controlled by Roles & Permissions. If you do not see a page or button, ask your administrator to grant the appropriate permission.
 
+The platform is multi-tenant: one deployment can host Cofficiency (the
+internal workspace) plus any number of customer tenants, with each tenant's
+users, agents, models, integrations, conversations, and reports fully
+isolated from the others. See "Tenant Switcher & Tenant Administration"
+below for what this means day-to-day.
+
 ---
 
 ## Sections
 
+### Tenant Switcher & Tenant Administration
+**Purpose:**
+Let Cofficiency staff work across customer tenant workspaces without a
+separate account per customer, while keeping every tenant's data isolated
+from the others.
+
+**Who can use it:**
+- The tenant **switcher** (in the header, left of your avatar) is visible
+  only to users whose home tenant is Cofficiency. External (customer) users
+  never see it — their account is permanently scoped to their own tenant.
+- **Tenant administration** (creating, renaming, archiving, and reactivating
+  tenants) is restricted to Cofficiency users with the admin role.
+
+**How to use it:**
+1. Click the tenant switcher in the header to see a dropdown of every active
+   tenant, with your current selection checked.
+2. Pick a tenant to make it your active workspace. Every tenant-owned page —
+   Users, System Config (models/attributes/integrations/agents/feature
+   flags), Conversations, Learning Center, Dashboard, and Reporting — now
+   shows only that tenant's data.
+3. Your selection is remembered (`last_active_tenant_id`) and restored the
+   next time you log in, even in a new browser session.
+4. Cofficiency admins manage tenants from "Administration → Tenant
+   Management": create a tenant (a URL-safe slug is generated from the
+   name automatically), edit its name, or archive/reactivate it. Archived
+   tenants disappear from the switcher and can't receive new users or
+   records. The protected Cofficiency tenant itself can never be renamed or
+   archived.
+
+**Key features / things to know:**
+- Switching tenants changes *what you're looking at*, never *what you're
+  allowed to do* — your role's page permissions apply identically in every
+  tenant.
+- A new user is always created in whichever tenant is currently active —
+  there is no tenant field on the Add User form, and no route lets anyone
+  change an existing user's tenant afterward.
+- Actions you take are attributed to the tenant that was active *at the
+  time*, not to your own home tenant. If you (as a Cofficiency user) create
+  an agent while Customer A is active, that action shows up in Customer A's
+  activity log, not Cofficiency's — even though you remain a Cofficiency
+  user throughout.
+- User Documentation and Release Notes are shared across every tenant and
+  don't change when you switch.
+
+---
+
 ### Dashboard
 **Purpose:**  
-A quick summary view of the platform showing counts and recent release notes so you can see high-level system status at a glance.
+A quick summary view of your active tenant workspace — counts and recent
+release notes so you can see high-level status at a glance.
 
 **Who can use it:**  
 Users who have permission to view the Dashboard (Admins and any user granted the "Dashboard" view permission).
@@ -22,8 +75,11 @@ Users who have permission to view the Dashboard (Admins and any user granted the
 3. Review the summary statistics and the list of recent release notes.
 
 **Key features:**
-- Instant summary counts: total users, roles, AI models, integrations, attributes, and release notes.
-- Recent release notes list (most recent items displayed).
+- Summary counts for **your active tenant only**: users, AI models,
+  integrations, and attributes. Switching tenants changes these numbers.
+- Roles and Release Notes counts are **global** (shared across every
+  tenant) and labeled as such on their cards — they don't change when you
+  switch tenants.
 - Quick breadcrumb navigation back to Home or other sections.
 
 ---
@@ -117,6 +173,13 @@ Administrators only (the Reporting area requires admin privileges).
 - External API Request logs: counts, errors, average latency, and per-integration logs.
 - Date range filters, pagination, and per-tab filters for focused analysis.
 - Admin-only access ensures sensitive logs are secure.
+- **Every tab reflects your active tenant only** — logs, totals, error rates,
+  averages, and filter dropdowns (models/users/integrations) all scope to
+  whichever tenant you currently have selected. A Cofficiency admin sees a
+  different Reporting page for each tenant they switch into.
+- Activity is attributed to the tenant it happened *in*, not the actor's home
+  tenant — if a Cofficiency user performed an action while Customer A was
+  active, it appears in Customer A's activity log.
 
 ---
 
@@ -159,9 +222,17 @@ Administrators or users with the User Management permission (view/edit).
 - Activity logging on create/update actions.
 
 Tips and rules:
-- Username and email must be unique; the system prevents duplicates.
+- Username and email must be unique **across the whole platform**, not just
+  within a tenant — login identity is global even though everything else
+  about a user is tenant-scoped.
 - Required fields for creation: username, email, password.
 - If a user's account is inactive, they cannot log in.
+- The users list only ever shows the active tenant's users — switching
+  tenants shows a different list. A new user is always assigned to whichever
+  tenant is currently active; there's no tenant field to fill in or change.
+- A user's tenant is fixed permanently at creation. No edit screen or route
+  can move a user to a different tenant afterward — that requires a
+  deliberate database migration by an engineer, not an admin action.
 
 ---
 
@@ -201,6 +272,11 @@ Best practices:
 - Use descriptive role names (example: support, analyst, viewer).
 - Keep at least one admin account separate from everyday roles.
 
+Note: Roles and permissions are **global** — the same role templates and
+permission levels apply in every tenant, and there's no way to define a
+tenant-specific role. Switching your active tenant never changes what your
+role permits.
+
 ---
 
 ### System Config — Models (AI model configuration)
@@ -232,6 +308,12 @@ Administrators or users granted the Models view/edit permission.
 
 Notes:
 - Visibility of sub-sections depends on your specific permissions (models, attributes, integrations, agents, flags).
+- Models, attributes, integrations, and agents are all scoped to your active
+  tenant — the lists, and any name you enter, only need to be unique within
+  that tenant, so two different tenants can each have their own model named
+  the same thing.
+- Marking a model "default" only replaces the previous default **within the
+  active tenant** — it never changes another tenant's default model.
 
 ---
 
@@ -299,27 +381,39 @@ Notes:
 
 ---
 
-### System Config — Feature Flags (toggle platform features)
+### System Config — Feature Flags (toggle features per tenant)
 **Purpose:**  
-Enable or disable experimental or optional platform features without code changes.
+Enable or disable optional platform features **for your active tenant**,
+without affecting any other tenant.
 
 **Who can use it:**  
 Administrators or users with Models/Feature Flag edit permission.
 
 **How to use it:**
-1. Navigate to "System Config" → "Feature Flags" (often on the Models/System Config page).
-2. Find the feature flag you want to change.
-3. Use the checkbox or toggle control to enable or disable the feature.
-4. Save or submit if required. The system records the change and logs the activity.
+1. Navigate to "System Config" → "Feature Flags".
+2. The table shows, for each feature: the **global default**, and the
+   **effective state for your active tenant** — marked "Inherited" (using
+   the global default) or "Overridden" (this tenant has its own setting).
+3. Click "Edit" and toggle the switch to set an override for the active
+   tenant only. This never changes the global default or any other tenant.
+4. If a tenant has an override you want to remove, click "Reset" to revert
+   it to the global default (the override row is deleted, not just
+   disabled).
 
 **Key features:**
-- Enable/disable features globally (immediately affects platform behavior).
-- Simple checkbox-based control.
-- Activity logging for flag toggles (who toggled which flag and when).
+- Toggling here only ever affects the tenant you currently have active —
+  it creates or updates a per-tenant override, never the shared global flag.
+- A brand-new tenant needs no setup: it simply inherits every flag's global
+  default until someone overrides one for it.
+- A disabled feature is enforced at the page/route level, not just hidden
+  from navigation — you can't reach it by typing the URL directly either.
+- Activity logging for flag toggles and resets (who changed what, and for
+  which tenant).
 
 Notes:
-- Feature flags may be grouped by area (e.g., models, UI experiments).
-- Only users with appropriate permissions can toggle flags.
+- Feature flags may be grouped by area (e.g., Conversations, Learning Center).
+- Only users with appropriate permissions can toggle flags, and only for
+  whichever tenant they currently have active.
 
 ---
 
