@@ -423,10 +423,10 @@ a:hover {
 
 .login-title {
   margin: 0 0 16px;
-  font-size: 27px;
+  font-size: 29.67px;
   font-weight: 700;
   color: var(--text);
-  font-family: "Titillium Web", sans-serif;
+  font-family: "Barlow", sans-serif;
 }
 
 .page-pretitle,
