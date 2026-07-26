@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}New Dataset - saas-mortgage{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div><h1 class="page-title">New Dataset</h1></div>
+</div>
+
+<div class="card" style="max-width:640px">
+  <div class="card-body">
+    <form method="post" action="{{ url_for('quality.add_dataset') }}">
+      <div class="mb-3">
+        <label class="form-label">Name</label>
+        <input type="text" name="name" class="form-control" required maxlength="255" placeholder="e.g. Q3 Loan Applications">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-control" rows="3" placeholder="Optional"></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Type</label>
+        <select name="dataset_type" class="form-select">
+          <option value="unlabeled" selected>Unlabeled</option>
+          <option value="labeled">Labeled</option>
+        </select>
+      </div>
+      <div class="form-hint" style="margin-bottom:16px">Rows can be imported after creation.</div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary">Create Dataset</button>
+        <a href="{{ url_for('quality.list_datasets') }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

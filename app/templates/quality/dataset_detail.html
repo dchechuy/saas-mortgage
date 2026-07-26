@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ (dataset.name if dataset else 'Dataset ' ~ dataset_id) }} - saas-mortgage{% endblock %}
+{% block content %}
+
+{% if error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;font-size:14px">
+  <strong>Could not load this Dataset:</strong> {{ error }}
+</div>
+{% endif %}
+
+{% if dataset %}
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">
+      {{ dataset.name }}
+      <span class="badge {{ 'text-bg-green-lt' if dataset.is_active else 'text-bg-secondary-lt' }}">
+        {{ 'Active' if dataset.is_active else 'Archived' }}
+      </span>
+    </h1>
+  </div>
+  {% if has_access('datasets', 'edit') and dataset.is_active %}
+  <form id="archive-ds-form" method="post" action="{{ url_for('quality.archive_dataset', dataset_id=dataset.id) }}" style="margin:0">
+    <button type="button" class="btn btn-secondary"
+            onclick="confirmAction('Archive Dataset', 'Archived Datasets cannot be used in new Experiments.', 'archive-ds-form', 'Archive', 'btn-danger')">
+      Archive
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+  <div class="card">
+    <div class="card-body">
+      <h3 style="margin-top:0">Details</h3>
+      {% if has_access('datasets', 'edit') %}
+      <form method="post" action="{{ url_for('quality.save_dataset', dataset_id=dataset.id) }}">
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input type="text" name="name" class="form-control" required maxlength="255" value="{{ dataset.name }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" rows="3">{{ dataset.description or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </form>
+      {% endif %}
+      <hr>
+      <div class="text-secondary" style="font-size:13px">
+        Type: {{ dataset.dataset_type | capitalize }}<br>
+        {% if dataset.current_version %}
+        Current version: v{{ dataset.current_version.version_number }}
+        — {{ dataset.current_version.row_count }} rows, {{ dataset.current_version.column_count }} columns
+        {% else %}
+        No data imported yet.
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h3 style="margin-top:0">Import Rows</h3>
+      <p class="text-secondary" style="font-size:13px">
+        Upload a CSV file. The header row becomes the column names. This replaces the current version
+        (previous versions remain in skunkBOX's history).
+      </p>
+      {% if has_access('datasets', 'edit') and dataset.is_active %}
+      <form method="post" action="{{ url_for('quality.import_dataset', dataset_id=dataset.id) }}" enctype="multipart/form-data">
+        <div class="mb-3">
+          <input type="file" name="file" class="form-control" accept=".csv" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Import CSV</button>
+      </form>
+      {% elif not dataset.is_active %}
+      <div class="form-hint">This Dataset is archived — reactivate it in skunkBOX to import more rows.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% elif not error %}
+<div class="card" style="padding:64px 24px;text-align:center">
+  <div style="font-size:15px;font-weight:600;color:var(--text)">Dataset not found</div>
+</div>
+{% endif %}
+{% endblock %}

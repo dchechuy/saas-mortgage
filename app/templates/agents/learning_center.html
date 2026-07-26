@@ -11,18 +11,34 @@
   <a href="{{ url_for('agents.learning_center', tab=coll.id) }}"
      class="tax-tab {{ 'active' if active_tab == coll.id|string else '' }}">
     {{ coll.name }}
+    {% if coll.is_shared %}<span class="badge text-bg-blue-lt" style="font-size:10px;margin-left:2px">Shared</span>{% endif %}
   </a>
   {% endfor %}
 </div>
+
+{% if collections_error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:10px 16px;margin-bottom:16px;font-size:13px">
+  Collection labels are temporarily unavailable ({{ collections_error }}) — showing documents without Shared/Owner labels.
+</div>
+{% endif %}
 
 <div class="sb-page-header">
   <div>
     <h1 class="page-title">
       {% if active_tab == 'all' %}All Documents
       {% else %}
-        {% for coll in collections %}{% if coll.id|string == active_tab %}{{ coll.name }}{% endif %}{% endfor %}
+        {% for coll in collections %}{% if coll.id|string == active_tab %}
+          {{ coll.name }}
+          {% if coll.is_shared %}<span class="badge text-bg-blue-lt" title="Shared by Cofficiency — read-only">Shared</span>{% endif %}
+        {% endif %}{% endfor %}
       {% endif %}
     </h1>
+    {% if active_tab != 'all' %}
+      {% for coll in collections %}{% if coll.id|string == active_tab and coll.document_count is not none %}
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">{{ coll.document_count }} document{{ 's' if coll.document_count != 1 else '' }}</div>
+      {% endif %}{% endfor %}
+    {% endif %}
   </div>
 </div>
 
@@ -101,6 +117,9 @@
                onclick="event.stopPropagation()">
               {{ doc.get('title') or doc.get('name') or doc.get('filename') or '—' }}
             </a>
+            {% if doc.get('is_shared') %}
+            <span class="badge text-bg-blue-lt" style="font-size:10px" title="Shared by Cofficiency — read-only">Shared</span>
+            {% endif %}
             {% set desc = doc.get('description') or '' %}
             {% if desc %}
             <div style="font-size:12px;color:var(--muted);margin-top:2px">

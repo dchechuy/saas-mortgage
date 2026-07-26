@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ (component.title if component else 'Component ' ~ component_id) }} - saas-mortgage{% endblock %}
+{% block content %}
+
+{% if error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;font-size:14px">
+  <strong>Could not load this Component:</strong> {{ error }}
+</div>
+{% endif %}
+
+{% if component %}
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">
+      {{ component.title }}
+      <span class="badge {{ 'text-bg-green-lt' if component.is_active else 'text-bg-secondary-lt' }}">
+        {{ 'Active' if component.is_active else 'Archived' }}
+      </span>
+    </h1>
+  </div>
+  <div style="display:flex;gap:10px">
+    {% if has_access('components', 'edit') %}
+    {% if component.is_active %}
+    <form id="archive-comp-form" method="post" action="{{ url_for('quality.archive_component', component_id=component.id) }}" style="margin:0">
+      <button type="button" class="btn btn-secondary"
+              onclick="confirmAction('Archive Component', 'Archived Components stay available for history but cannot be used in new Experiments. You can reactivate it later.', 'archive-comp-form', 'Archive', 'btn-danger')">
+        Archive
+      </button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('quality.reactivate_component', component_id=component.id) }}" style="margin:0">
+      <button type="submit" class="btn btn-secondary">Reactivate</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% set draft = component.versions | selectattr('status', 'equalto', 'draft') | list | first %}
+{% set release = component.versions | selectattr('status', 'equalto', 'release') | list | first %}
+
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start">
+  <div class="card">
+    <div class="card-body">
+      <h3 style="margin-top:0">Fields &amp; Configuration</h3>
+      {% if has_access('components', 'edit') %}
+      <form method="post" action="{{ url_for('quality.save_component', component_id=component.id) }}">
+        <div class="mb-3">
+          <label class="form-label">Title</label>
+          <input type="text" name="title" class="form-control" required maxlength="255" value="{{ component.title }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" rows="2">{{ component.description or '' }}</textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">System Prompt</label>
+          <textarea name="system_prompt" class="form-control" rows="3" placeholder="(write-only — not returned by skunkBOX, so this always starts blank)"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">JSON Schema</label>
+          <textarea name="json_schema" class="form-control" rows="3" style="font-family:monospace;font-size:12px"
+                    placeholder="(write-only — not returned by skunkBOX, so this always starts blank)"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Formatting Requirements</label>
+          <textarea name="json_formatting_requirements" class="form-control" rows="2"
+                    placeholder="(write-only — not returned by skunkBOX, so this always starts blank)"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Release Notes</label>
+          <textarea name="release_notes" class="form-control" rows="2"></textarea>
+        </div>
+
+        <hr>
+        <h4>Draft Version {{ 'v' ~ draft.version_number if draft else '' }}</h4>
+        {% if not draft %}
+        <div class="form-hint">No draft version — promote history is final for this Component.</div>
+        {% elif draft.is_locked %}
+        <div class="form-hint">This draft has already been used in an Experiment and is locked — its prompt fields can no longer be edited.</div>
+        {% else %}
+        <div class="mb-3">
+          <label class="form-label">Prompt</label>
+          <textarea name="prompt" class="form-control" rows="4">{{ draft.prompt or '' }}</textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Output Fields</label>
+          <textarea name="output_fields" class="form-control" rows="2" style="font-family:monospace;font-size:12px">{{ draft.output_fields or '' }}</textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Justification Prompt</label>
+          <textarea name="justification_prompt" class="form-control" rows="2">{{ draft.justification_prompt or '' }}</textarea>
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-primary">Save</button>
+      </form>
+      {% else %}
+      <p class="text-secondary">{{ component.description or 'No description.' }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h3 style="margin-top:0">Versions</h3>
+      <table class="table table-vcenter" style="margin:0">
+        <tbody>
+          {% for v in component.versions | sort(attribute='version_number', reverse=true) %}
+          <tr>
+            <td>
+              v{{ v.version_number }}
+              <span class="badge {{ {'draft':'text-bg-yellow-lt','release':'text-bg-azure-lt','production':'text-bg-green-lt','legacy':'text-bg-secondary-lt'}[v.status] }}">
+                {{ v.status | capitalize }}
+              </span>
+              {% if v.is_locked %}<span class="badge text-bg-secondary-lt" title="Already used in an Experiment">Locked</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {% if has_access('components', 'edit') %}
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+        {% if draft %}
+        <form method="post" action="{{ url_for('quality.promote_component', component_id=component.id) }}">
+          <input type="hidden" name="target_status" value="release">
+          <button type="submit" class="btn btn-secondary w-100" {{ 'disabled' if release else '' }}>Promote Draft → Release</button>
+        </form>
+        {% endif %}
+        {% if release %}
+        <form method="post" action="{{ url_for('quality.promote_component', component_id=component.id) }}">
+          <input type="hidden" name="target_status" value="production">
+          <button type="submit" class="btn btn-primary w-100">Promote Release → Production</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% elif not error %}
+<div class="card" style="padding:64px 24px;text-align:center">
+  <div style="font-size:15px;font-weight:600;color:var(--text)">Component not found</div>
+</div>
+{% endif %}
+{% endblock %}

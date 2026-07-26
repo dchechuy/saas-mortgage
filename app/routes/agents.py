@@ -11,7 +11,8 @@ from ..crypto import decrypt_value
 from ..extensions import db
 from sqlalchemy import func
 from ..models import AgentConversation, AgentMessage, AiAgent, ApiRequestLog, Integration, User
-from ..tenant_context import get_active_tenant_id, require_tenant_record
+from ..services.agent_sync import sync_shared_agents_for_tenant
+from ..tenant_context import get_active_tenant, get_active_tenant_id, require_tenant_record
 
 agents_bp = Blueprint("agents", __name__, url_prefix="/agents")
 
@@ -179,7 +180,9 @@ def _call_skunkbox(integration, skunkbox_agent_id: int,
 @permission_required("conversations", "view")
 @feature_required("conversations")
 def list_conversations():
-    active_tenant_id = get_active_tenant_id()
+    active_tenant = get_active_tenant()
+    active_tenant_id = active_tenant.id if active_tenant else None
+    sync_shared_agents_for_tenant(active_tenant)
 
     # ── Auto-delete empty conversations (no messages sent, older than 30 min) ──
     from datetime import datetime as _dt, timedelta as _td
@@ -626,6 +629,26 @@ def download_attachment(skunkbox_attachment_id):
 # Learning Center — document list + detail (reads from Documents integration)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _fetch_collections_from_management_api(active_tenant):
+    """Authoritative collection list (id/name/is_shared/owner/document_count)
+    from skunkBOX's Phase 4 management API — clean labels, no derivation
+    from document payloads. Returns (collections, error); collections is
+    always a list, sorted Shared-last then alphabetically."""
+    if not active_tenant or not active_tenant.external_id or active_tenant.sync_status != "synced":
+        return [], None
+    from .. import skunkbox_client
+    from ..skunkbox_client import SkunkBoxClientError
+    try:
+        data = skunkbox_client.list_knowledge_collections(active_tenant.external_id)
+    except SkunkBoxClientError as exc:
+        return [], str(exc)
+    except Exception as exc:
+        return [], str(exc)
+    collections = data.get("collections", [])
+    collections.sort(key=lambda c: (c.get("is_shared", False), (c.get("name") or "").lower()))
+    return collections, None
+
+
 @agents_bp.route("/learning-center")
 @login_required
 @permission_required("learning_center", "view")
@@ -633,15 +656,19 @@ def download_attachment(skunkbox_attachment_id):
 def learning_center():
     page       = request.args.get("page", 1, type=int)
     active_tab = request.args.get("tab", "all")   # "all" or str(collection_id)
+    active_tenant = get_active_tenant()
     integration = _get_docs_integration()
     docs, total, total_pages, error = [], 0, 1, None
-    collections = []   # [{id, name}] sorted A-Z
+
+    collections, collections_error = _fetch_collections_from_management_api(active_tenant)
 
     if integration:
         try:
             # ── Single API call: fetch the full corpus (≤500 docs) ─────────
             # Filtering and pagination are done in Python to avoid a second
-            # round-trip and stay well within the 10 RPM rate limit.
+            # round-trip and stay well within the 10 RPM rate limit. This is
+            # still the older per-tenant Integration/X-API-Key path — the
+            # management API above has no document-content endpoint.
             all_data = _call_skunkbox_get(integration, "documents", {
                 "limit": 500, "offset": 0,
             })
@@ -649,15 +676,19 @@ def learning_center():
                         or all_data.get("data")
                         or (all_data if isinstance(all_data, list) else []))
 
-            # Build sorted collections list from the corpus
-            seen: dict = {}
-            for d in all_docs:
-                for c in (d.get("collections") or []):
-                    seen[c["id"]] = c["name"]
-            collections = sorted(
-                [{"id": cid, "name": name} for cid, name in seen.items()],
-                key=lambda c: c["name"].lower(),
-            )
+            if not collections:
+                # Management API unavailable/unsynced — fall back to
+                # deriving a bare (unlabeled) collection list from the
+                # documents themselves so browsing still works.
+                seen: dict = {}
+                for d in all_docs:
+                    for c in (d.get("collections") or []):
+                        seen[c["id"]] = c["name"]
+                collections = sorted(
+                    [{"id": cid, "name": name, "is_shared": False, "owner": None,
+                      "can_edit": False, "document_count": None} for cid, name in seen.items()],
+                    key=lambda c: c["name"].lower(),
+                )
 
             # Filter by collection when a collection tab is active
             if active_tab != "all":
@@ -689,6 +720,7 @@ def learning_center():
         total_pages=total_pages,
         integration=integration,
         error=error,
+        collections_error=collections_error,
         collections=collections,
         active_tab=active_tab,
         breadcrumbs=[

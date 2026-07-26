@@ -33,11 +33,23 @@ def _make_integration(app, tenant_id, name="OpenAI Prod", use_case="AI Agents"):
         return integ.id
 
 
-def _make_agent(app, tenant_id, integration_id, name="Helper"):
+def _make_agent(app, tenant_id, integration_id, name="Helper", skunkbox_agent_id=None):
+    """`skunkbox_agent_id` defaults to a value unique within `tenant_id` —
+    the legacy fixture data already seeds a skunkbox_agent_id=1 'Helper'
+    agent under AdvantageFirst, and (tenant_id, skunkbox_agent_id) is
+    unique (Phase 6: no ambiguous duplicate local ownership of one skunkBOX
+    agent), so a caller creating a second agent for the same tenant must
+    not collide with it."""
     with app.app_context():
+        if skunkbox_agent_id is None:
+            existing_ids = {
+                row[0] for row in
+                db.session.query(AiAgent.skunkbox_agent_id).filter_by(tenant_id=tenant_id).all()
+            }
+            skunkbox_agent_id = next(i for i in range(1, 1000) if i not in existing_ids)
         agent = AiAgent(
             tenant_id=tenant_id, name=name, integration_id=integration_id,
-            skunkbox_agent_id=1, is_active=True,
+            skunkbox_agent_id=skunkbox_agent_id, is_active=True,
         )
         db.session.add(agent)
         db.session.commit()

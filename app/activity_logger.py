@@ -66,6 +66,7 @@ ACTION_LABELS: dict[str, str] = {
     "tenant.archived":         "Archived Tenant",
     "tenant.reactivated":      "Reactivated Tenant",
     "tenant.switched":         "Switched Tenant",
+    "tenant.synced":           "Synced Tenants with skunkBOX",
 }
 
 

@@ -13,6 +13,9 @@ PAGES = [
     {"slug": "integrations", "label": "Integrations"},
     {"slug": "agents", "label": "AI Agents"},
     {"slug": "tenants", "label": "Tenant Management"},
+    {"slug": "components", "label": "AI Assets"},
+    {"slug": "datasets", "label": "Datasets"},
+    {"slug": "experiments", "label": "AI Quality"},
 ]
 
 # Registry for nav items that can appear in the left sidebar.
@@ -79,6 +82,30 @@ NAV_ITEMS = {
         "active_endpoints": ["tenants.list_tenants", "tenants.add_tenant", "tenants.edit_tenant"],
         "permission_slug":  "tenants",
         "cofficiency_only": True,
+    },
+    "components": {
+        "label":            "AI Assets",
+        "icon":             "sparkles",
+        "endpoint":         "quality.list_components",
+        "active_endpoints": ["quality.list_components", "quality.add_component", "quality.view_component"],
+        "permission_slug":  "components",
+        "feature_flag":     "ai_quality",
+    },
+    "datasets": {
+        "label":            "Datasets",
+        "icon":             "database",
+        "endpoint":         "quality.list_datasets",
+        "active_endpoints": ["quality.list_datasets", "quality.add_dataset", "quality.view_dataset"],
+        "permission_slug":  "datasets",
+        "feature_flag":     "ai_quality",
+    },
+    "experiments": {
+        "label":            "AI Quality",
+        "icon":             "flask",
+        "endpoint":         "quality.list_experiments",
+        "active_endpoints": ["quality.list_experiments", "quality.new_experiment", "quality.view_experiment"],
+        "permission_slug":  "experiments",
+        "feature_flag":     "ai_quality",
     },
 }
 

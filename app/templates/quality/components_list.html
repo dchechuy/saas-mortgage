@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+{% block title %}AI Assets - saas-mortgage{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">AI Assets</h1>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <a href="{{ url_for('quality.list_components', show_archived=1) if not show_archived else url_for('quality.list_components') }}"
+       class="btn btn-secondary">{{ 'Hide Archived' if show_archived else 'Show Archived' }}</a>
+    {% if has_access('components', 'edit') %}
+    <a href="{{ url_for('quality.add_component') }}" class="btn btn-primary">+ New Component</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;font-size:14px">
+  <strong>Could not load Components:</strong> {{ error }}
+</div>
+{% endif %}
+
+<div class="card">
+  {% if components %}
+  <div class="ds-table-shell">
+    <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Current Version</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in components %}
+        {% set live = c.versions | selectattr('status', 'in', ['release', 'production']) | list | last %}
+        <tr style="cursor:pointer" onclick="window.location='{{ url_for('quality.view_component', component_id=c.id) }}'">
+          <td><strong>{{ c.title }}</strong></td>
+          <td>
+            <span class="badge {{ 'text-bg-green-lt' if c.is_active else 'text-bg-secondary-lt' }}">
+              {{ 'Active' if c.is_active else 'Archived' }}
+            </span>
+          </td>
+          <td class="text-secondary">
+            {% if live %}v{{ live.version_number }} ({{ live.status | capitalize }}){% else %}Draft only{% endif %}
+          </td>
+          <td class="text-secondary">
+            <span class="local-time" data-utc="{{ c.created_at }}">{{ c.created_at[:10] }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% elif not error %}
+  <div class="card-body">
+    {{ empty_state("No Components yet", "Create your first AI Asset to define fields, prompts, and versions.", "sparkles") }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -22,7 +22,7 @@ def create_app() -> Flask:
     login_manager.init_app(app)
 
     from .models import (AiAgent, AgentConversation, AgentMessage,  # noqa: F401
-                          Attribute, DocPrompt, FeatureFlag, Integration, LlmModel,
+                          Attribute, DocPrompt, Experiment, FeatureFlag, Integration, LlmModel,
                           LlmRequestLog, UserActivityLog, ApiRequestLog,
                           NavItem, NavSection,
                           Permission, ReleaseNote, Role, Tenant, TenantFeatureFlag, User)
@@ -37,6 +37,7 @@ def create_app() -> Flask:
     from .routes.main import main_bp
     from .routes.models import models_bp
     from .routes.permissions import permissions_bp
+    from .routes.quality import quality_bp
     from .routes.reporting import reporting_bp
     from .routes.tenants import tenants_bp
     from .routes.users import users_bp
@@ -47,9 +48,13 @@ def create_app() -> Flask:
     app.register_blueprint(main_bp)
     app.register_blueprint(models_bp)
     app.register_blueprint(permissions_bp)
+    app.register_blueprint(quality_bp)
     app.register_blueprint(reporting_bp)
     app.register_blueprint(tenants_bp)
     app.register_blueprint(users_bp)
+
+    from .cli import register_cli
+    register_cli(app)
 
     @app.template_filter("md")
     def render_markdown(text: str) -> str:
@@ -85,6 +90,9 @@ def create_app() -> Flask:
         UI from users."""
         from .feature_flags import effective_feature_flags
 
+        # ai_quality deliberately excluded: its real default is False (see
+        # _seed_defaults' default_flags), unlike every other flag here,
+        # which default True pre-migration as a defensive fallback.
         _KNOWN_FLAGS = ["conversations", "learning_center", "ai_agents_section", "system_overview"]
         flags = {f"flag_{k}": True for k in _KNOWN_FLAGS}
         try:
@@ -173,6 +181,9 @@ def _seed_defaults() -> None:
         return
     if not inspector.has_table("tenant"):
         return
+    tenant_cols = {c["name"] for c in inspector.get_columns("tenant")}
+    if "external_id" not in tenant_cols:
+        return
 
     cofficiency = Tenant.query.filter_by(slug="cofficiency").first()
     advantagefirst = Tenant.query.filter_by(slug="advantagefirst").first()
@@ -230,14 +241,18 @@ def _seed_defaults() -> None:
             ))
 
     default_flags = [
-        ("conversations",    "Conversations",       "Show the Conversations page under AI Agents"),
-        ("learning_center",  "Learning Center",     "Show the Learning Center page under AI Agents"),
-        ("ai_agents_section","AI Agents Section",   "Show the AI Agents section in the left navigation menu"),
-        ("system_overview",  "System Overview",     "Show the System Overview section in the left navigation menu"),
+        ("conversations",    "Conversations",       "Show the Conversations page under AI Agents", True),
+        ("learning_center",  "Learning Center",     "Show the Learning Center page under AI Agents", True),
+        ("ai_agents_section","AI Agents Section",   "Show the AI Agents section in the left navigation menu", True),
+        ("system_overview",  "System Overview",     "Show the System Overview section in the left navigation menu", True),
+        # Off by default — enabled per customer via a TenantFeatureFlag
+        # override once they're ready for the Components/Datasets/AI
+        # Quality workflow (Cross-System Tenant AI Assets PRD Phase 7).
+        ("ai_quality",       "AI Assets & Quality", "Show AI Assets, Datasets, and AI Quality in the left navigation menu", False),
     ]
-    for key, label, desc in default_flags:
+    for key, label, desc, default_enabled in default_flags:
         if not FeatureFlag.query.filter_by(key=key).first():
-            db.session.add(FeatureFlag(key=key, label=label, description=desc, is_enabled=True))
+            db.session.add(FeatureFlag(key=key, label=label, description=desc, is_enabled=default_enabled))
 
     # Nav sections are seeded via migration h8i9j0k1l2m3, not at startup.
     # Seeding here caused a race condition with multiple gunicorn workers.

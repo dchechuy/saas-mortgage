@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}New Experiment - saas-mortgage{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div><h1 class="page-title">New Experiment</h1></div>
+</div>
+
+{% if error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;font-size:14px">
+  <strong>Could not load Components/Datasets:</strong> {{ error }}
+</div>
+{% endif %}
+
+<div class="card" style="max-width:640px">
+  <div class="card-body">
+    {% if not components %}
+    <p class="text-secondary">No Component has a Release or Production version yet — promote a Component version before running an Experiment.</p>
+    {% elif not datasets %}
+    <p class="text-secondary">No Dataset has data imported yet — import a CSV into a Dataset before running an Experiment.</p>
+    {% else %}
+    <form method="post" action="{{ url_for('quality.new_experiment') }}">
+      <input type="hidden" name="component_id" id="component_id_hidden">
+      <input type="hidden" name="dataset_id" id="dataset_id_hidden">
+
+      <div class="mb-3">
+        <label class="form-label">Component Version</label>
+        <select name="component_version_id" class="form-select" required
+                onchange="document.getElementById('component_id_hidden').value = this.selectedOptions[0].dataset.componentId">
+          <option value="" selected disabled>Select a version…</option>
+          {% for c in components %}
+          {% for v in c.eligible_versions %}
+          <option value="{{ v.id }}" data-component-id="{{ c.id }}">{{ c.title }} — v{{ v.version_number }} ({{ v.status | capitalize }})</option>
+          {% endfor %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Dataset</label>
+        <select name="dataset_version_id" class="form-select" required
+                onchange="document.getElementById('dataset_id_hidden').value = this.selectedOptions[0].dataset.datasetId">
+          <option value="" selected disabled>Select a dataset…</option>
+          {% for d in datasets %}
+          <option value="{{ d.current_version.id }}" data-dataset-id="{{ d.id }}">
+            {{ d.name }} (v{{ d.current_version.version_number }}, {{ d.current_version.row_count }} rows)
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Model ID</label>
+        <input type="number" name="model_id" class="form-control" required min="1" placeholder="e.g. 1">
+        <div class="form-hint">The skunkBOX model id to run this Experiment against — ask your Cofficiency contact if you don't know it.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Description</label>
+        <input type="text" name="description" class="form-control" maxlength="255" placeholder="Optional">
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary">Start Experiment</button>
+        <a href="{{ url_for('quality.list_experiments') }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

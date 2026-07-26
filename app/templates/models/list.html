@@ -283,6 +283,9 @@
             </td>
             <td>
               <strong>{{ agent.name }}</strong>
+              {% if agent.is_shared %}
+              <span class="badge text-bg-blue-lt" title="Managed by Cofficiency — read-only">Shared</span>
+              {% endif %}
               {% if agent.description %}
               <div style="font-size:12px;color:var(--muted)">{{ agent.description }}</div>
               {% endif %}
@@ -298,6 +301,9 @@
             </td>
             {% if has_access('agents', 'edit') %}
             <td>
+              {% if agent.is_shared %}
+              <span style="font-size:12px;color:var(--muted)" title="Synced from skunkBOX — not editable here">Managed by Cofficiency</span>
+              {% else %}
               <div class="overflow-menu">
                 <button class="overflow-btn" onclick="toggleMenu(event,'agmenu-{{ agent.id }}')">⋮</button>
                 <div class="overflow-dropdown" id="agmenu-{{ agent.id }}">
@@ -320,6 +326,7 @@
                   </form>
                 </div>
               </div>
+              {% endif %}
             </td>
             {% endif %}
           </tr>

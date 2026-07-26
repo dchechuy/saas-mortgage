@@ -94,18 +94,108 @@ authenticated AND existing page/action permission AND record.tenant_id == active
 
 ### skunkBOX interim boundary
 
-skunkBOX (the external AI/document backend) does not yet accept a tenant ID.
-Isolation is indirect: each tenant has its own `Integration` credentials, and
-`AiAgent`s reference only same-tenant integrations. Every chat, attachment,
-and Learning Center/knowledge-base call resolves its integration through the
-active tenant (or the owning conversation's tenant) before making the
+For chat, attachments, and Learning Center/knowledge-base calls, skunkBOX
+still does not accept a tenant ID. Isolation there is indirect: each tenant
+has its own `Integration` credentials, and `AiAgent`s reference only
+same-tenant integrations. Every such call resolves its integration through
+the active tenant (or the owning conversation's tenant) before making the
 outbound request — a cross-tenant integration/agent reference is rejected
-locally first. No speculative tenant field is sent to skunkBOX.
+locally first. No speculative tenant field is sent to skunkBOX for these
+calls.
+
+Tenant *lifecycle* is a separate, already-solved boundary (Cross-System
+Tenant AI Assets PRD, Phase 4/5): skunkBOX is authoritative for tenant
+create/edit/archive/reactivate, and Cophy's `Tenant` table is a local mirror
+keyed by immutable UUID (`Tenant.external_id`, mapping to skunkBOX's
+`Tenant.public_id`). See `app/skunkbox_client.py` (the service-credential
+HTTP client), `app/services/tenant_sync.py` (upsert-by-UUID and
+reconciliation), and `app/routes/tenants.py` (skunkBOX-first lifecycle
+routes — no local-only mutation path). `flask sync-tenants` (`app/cli.py`)
+and the in-app "Sync with skunkBOX" button share the same reconciliation
+logic. A tenant with `sync_status != "synced"` cannot be used to create new
+portal users or AI agents (`app/routes/users.py:add_user`,
+`app/routes/models.py:add_agent`) — see `Tenant.sync_status`.
+
+`app/tenant_context.py` provides `get_active_tenant_external_id()` /
+`require_active_tenant_external_id()` as the sanctioned way to resolve the
+active tenant's skunkBOX UUID: always server-side, from the already-resolved
+active tenant, never from a request header, form field, or query string.
+
+Phase 6 is the first consumer of that plumbing: `app/skunkbox_client.py`'s
+`list_knowledge_collections()` / `get_knowledge_collection()` /
+`list_agents()` / `get_agent()` call skunkBOX's Phase 4 management API
+(`GET /api/v1/management/knowledge/collections`, `GET
+/api/v1/management/agents`, service credential + `X-Tenant-Id`) to list
+records the active tenant may see — its own plus Cofficiency's Shared
+knowledge collections/Agents (`is_shared`/`owner`/`can_edit` in the
+response; skunkBOX enforces the `tenant_id == caller OR is_shared`
+visibility rule server-side, Cophy does not re-derive it). This is a
+**second, disjoint skunkBOX auth path** layered on top of the one described
+above — `app/routes/agents.py`'s Learning Center document
+listing/detail/download and the chat API still use the older per-tenant
+`Integration`/`X-API-Key` path, since the Phase 4 management API has no
+document-content, search, or download endpoint. A single Learning Center
+page load therefore calls skunkBOX twice, once under each credential
+scheme: the management API for the clean collection list/labels, the old
+API for the actual documents.
+
+`app/services/agent_sync.py`'s `sync_shared_agents_for_tenant()` upserts a
+local `AiAgent` mirror row (`is_shared=True`) per Cofficiency Shared Agent
+visible to a tenant, run inline on every `list_conversations()` view — the
+same "always live, no scheduled job" approach Learning Center already used
+for documents, rather than a new reconciliation command. The mirror's
+`tenant_id` is the *customer* tenant using it (not Cofficiency), and it
+points at that tenant's own "AI Agents" `Integration` — so starting a
+conversation with a Shared Agent needs no special-casing anywhere in the
+existing conversation code: `AgentConversation.tenant_id` and the outbound
+chat call's credentials are already correct by construction. A
+`(tenant_id, skunkbox_agent_id)` uniqueness constraint on `ai_agent` (Phase
+6 migration) prevents a customer admin from hand-creating a second local
+row for a `skunkbox_agent_id` already mirrored — the "no ambiguous
+duplicate local ownership" requirement. A Shared mirror can never be
+edited/deactivated through the admin UI (`app/routes/models.py`
+`save_agent`/`toggle_agent` reject it); it's deactivated, never deleted,
+when `sync_shared_agents_for_tenant()` next runs and the Agent is no longer
+visible (unshared, archived).
+
+Phase 7 extends the same management-API path to Components (AI Assets),
+Datasets, and Experiments — `app/routes/quality.py` (blueprint `quality_bp`,
+`/quality/*`). Components and Datasets follow Learning Center's "thin proxy,
+no local copy" pattern exactly: every field, version, and row lives only in
+skunkBOX, fetched fresh on each request via `require_active_tenant_external_id()`.
+Every resource id from the URL passes straight through to
+`app/skunkbox_client.py`, which sends it with the server-resolved tenant
+UUID; skunkBOX independently re-validates ownership and 404s a cross-tenant
+or forged id identically to a nonexistent one, and Cophy never second-guesses
+that with its own ownership check.
+
+`Experiment` is the one local table in this phase, and it exists only
+because skunkBOX's Phase 4 management API has no `GET /experiments` list
+endpoint — there is no other way to show a history list. It stores just
+enough to resolve back to skunkBOX (`skunkbox_experiment_id`,
+`skunkbox_component_id`/`skunkbox_component_version_id`,
+`skunkbox_dataset_id`/`skunkbox_dataset_version_id`) plus who started it and
+when; status, progress, and results are always live-fetched by
+`skunkbox_experiment_id`, never cached, per the PRD's "do not recreate ...
+evaluation state machines locally." The experiment status-poll endpoint
+(`/quality/experiments/<id>/status`) re-derives the active tenant from the
+server-side session on every call and re-checks local `Experiment` ownership
+first — a tenant switch mid-poll gets a 404 on the next tick rather than
+continuing to show a previous tenant's progress.
+
+A known upstream gap (not fixable from this repo): skunkBOX's
+`component_to_dict()` never returns `system_prompt`, `json_schema`,
+`json_formatting_requirements`, or `release_notes`, even though `PATCH`
+writes them — those fields are write-only from Cophy's UI and always render
+blank on reload (documented in the Components edit form itself, and in
+`docs/USER_MANUAL.md`). Similarly, there is no `model_id` enumeration
+endpoint, so the Experiment-creation form takes it as a manually-typed
+integer — the same established pattern as `AiAgent.skunkbox_agent_id`.
 
 **Future work** (not yet implemented):
-- Calls must be tenant-owned when that feature is built.
-- Components / AI Assets require a tenant-aware skunkBOX management API,
-  which doesn't exist yet.
-- skunkBOX requests will eventually carry an explicit tenant ID in addition
-  to today's tenant-specific credentials.
+- Chat/attachment/knowledge-base document calls still use the older
+  per-tenant credential path; migrating them onto an explicit tenant UUID
+  (retiring the dual-auth-path situation above) is unscheduled future work.
+- Phase 8 (cross-system audit and staged rollout) per the PRD's phased
+  delivery plan.
 

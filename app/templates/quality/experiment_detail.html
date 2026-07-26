@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Experiment #{{ experiment.id }} - saas-mortgage{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div><h1 class="page-title">{{ experiment.description or ('Experiment #' ~ experiment.skunkbox_experiment_id) }}</h1></div>
+</div>
+
+{% if error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;font-size:14px">
+  <strong>Could not load live status from skunkBOX:</strong> {{ error }}
+</div>
+{% endif %}
+
+{% if skunkbox_experiment %}
+<div class="card" style="margin-bottom:20px">
+  <div class="card-body">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <span id="status-badge" class="badge {{ {'pending':'text-bg-yellow-lt','running':'text-bg-azure-lt','completed':'text-bg-green-lt','failed':'text-bg-red-lt','canceled':'text-bg-secondary-lt'}[skunkbox_experiment.status] }}">
+        {{ skunkbox_experiment.status | capitalize }}
+      </span>
+      <span id="progress-text" class="text-secondary" style="font-size:13px">
+        {{ skunkbox_experiment.processed_records }}/{{ skunkbox_experiment.total_records or '?' }} processed
+        ({{ skunkbox_experiment.failed_records }} failed) — {{ skunkbox_experiment.progress_pct }}%
+      </span>
+    </div>
+    <div class="progress" style="height:8px;margin-bottom:16px">
+      <div id="progress-bar" class="progress-bar" style="width:{{ skunkbox_experiment.progress_pct }}%"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:13px" id="eval-metrics">
+      <div><span class="text-secondary">Eval Status</span><br><strong>{{ skunkbox_experiment.eval_status or '—' }}</strong></div>
+      <div><span class="text-secondary">Overall Score</span><br><strong>{{ skunkbox_experiment.eval_overall_score if skunkbox_experiment.eval_overall_score is not none else '—' }}</strong></div>
+      <div><span class="text-secondary">Precision / Recall</span><br>
+        <strong>{{ skunkbox_experiment.precision if skunkbox_experiment.precision is not none else '—' }}
+        / {{ skunkbox_experiment.recall if skunkbox_experiment.recall is not none else '—' }}</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h3 style="margin-top:0">Results</h3>
+    {% if results %}
+    <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead>
+        <tr><th>#</th><th>Status</th><th>Score</th><th>Latency</th><th>Error</th></tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr>
+          <td>{{ r.record_index }}</td>
+          <td>
+            <span class="badge {{ 'text-bg-green-lt' if r.status == 'completed' else 'text-bg-red-lt' if r.status == 'failed' else 'text-bg-secondary-lt' }}">
+              {{ r.status | capitalize }}
+            </span>
+          </td>
+          <td>{{ r.eval_scores.overall_score if r.eval_scores and r.eval_scores.overall_score is not none else '—' }}</td>
+          <td class="text-secondary">{{ (r.latency_ms ~ ' ms') if r.latency_ms else '—' }}</td>
+          <td class="text-secondary">{{ r.error_message or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="text-secondary">No results yet — check back once the run finishes processing.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if skunkbox_experiment.status in ('pending', 'running') %}
+<script>
+(function () {
+  var statusUrl = {{ url_for('quality.experiment_status', experiment_id=experiment.id) | tojson }};
+  var pollInterval = setInterval(function () {
+    fetch(statusUrl, {headers: {"X-Requested-With": "XMLHttpRequest"}})
+      .then(function (resp) {
+        if (!resp.ok) { clearInterval(pollInterval); return null; }
+        return resp.json();
+      })
+      .then(function (data) {
+        if (!data || !data.ok) { clearInterval(pollInterval); return; }
+        var exp = data.experiment;
+        document.getElementById('progress-bar').style.width = exp.progress_pct + '%';
+        document.getElementById('progress-text').textContent =
+          exp.processed_records + '/' + (exp.total_records || '?') + ' processed (' +
+          exp.failed_records + ' failed) — ' + exp.progress_pct + '%';
+        if (exp.status !== 'pending' && exp.status !== 'running') {
+          clearInterval(pollInterval);
+          window.location.reload();
+        }
+      })
+      .catch(function () { clearInterval(pollInterval); });
+  }, 4000);
+  // A tenant switch elsewhere in the app re-renders this whole page on
+  // navigation anyway; this poll only guards the current tab staying open.
+})();
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}

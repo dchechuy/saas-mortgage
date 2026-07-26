@@ -20,6 +20,9 @@
       <h1 class="page-title" style="margin:0">{{ conv.title or agent.name }}</h1>
       <div style="font-size:12px;color:var(--muted);margin-top:2px">
         {{ agent.name }}
+        {% if agent.is_shared %}
+        <span class="badge text-bg-blue-lt" style="font-size:10px" title="Shared by Cofficiency — read-only">Shared</span>
+        {% endif %}
         {% if conv_user and conv_user.id != current_user.id %}
         <span style="margin-left:6px;padding:1px 8px;border-radius:10px;background:var(--panel-muted);border:1px solid var(--border);font-size:11px;color:var(--text)">
           {{ conv_user.full_name or conv_user.username }}

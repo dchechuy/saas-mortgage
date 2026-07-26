@@ -61,6 +61,11 @@ def add_user():
 
         if not active_tenant or not active_tenant.is_active:
             flash("Cannot add a user: no active tenant workspace is available.", "error")
+        elif active_tenant.sync_status != "synced":
+            flash(
+                "Cannot add a user: the active tenant is not synchronized with skunkBOX. "
+                "Run tenant reconciliation and try again.", "error",
+            )
         elif not username or not email or not password:
             flash("Username, email, and password are required.", "error")
         elif role not in roles:

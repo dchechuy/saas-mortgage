@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+{% block title %}Datasets - saas-mortgage{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div><h1 class="page-title">Datasets</h1></div>
+  {% if has_access('datasets', 'edit') %}
+  <a href="{{ url_for('quality.add_dataset') }}" class="btn btn-primary">+ New Dataset</a>
+  {% endif %}
+</div>
+
+{% if error %}
+<div style="background:var(--danger-bg);color:var(--danger-text);border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;font-size:14px">
+  <strong>Could not load Datasets:</strong> {{ error }}
+</div>
+{% endif %}
+
+<div class="card">
+  {% if datasets %}
+  <div class="ds-table-shell">
+    <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Rows</th>
+          <th>Status</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in datasets %}
+        <tr style="cursor:pointer" onclick="window.location='{{ url_for('quality.view_dataset', dataset_id=d.id) }}'">
+          <td><strong>{{ d.name }}</strong></td>
+          <td class="text-secondary">{{ d.dataset_type | capitalize }}</td>
+          <td class="text-secondary">
+            {% if d.current_version %}{{ d.current_version.row_count }} rows{% else %}No data yet{% endif %}
+          </td>
+          <td>
+            <span class="badge {{ 'text-bg-green-lt' if d.is_active else 'text-bg-secondary-lt' }}">
+              {{ 'Active' if d.is_active else 'Archived' }}
+            </span>
+          </td>
+          <td class="text-secondary">
+            <span class="local-time" data-utc="{{ d.created_at }}">{{ d.created_at[:10] }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% elif not error %}
+  <div class="card-body">
+    {{ empty_state("No Datasets yet", "Create a Dataset and import rows to use it in an Experiment.", "database") }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

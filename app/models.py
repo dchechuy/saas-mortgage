@@ -8,7 +8,14 @@ from .extensions import db
 
 class Tenant(db.Model):
     """A tenant-isolated workspace. Cofficiency is the protected internal tenant;
-    all other tenants are customer POC/prototype workspaces."""
+    all other tenants are customer POC/prototype workspaces.
+
+    skunkBOX is the authoritative tenant registry (Cross-System Tenant AI
+    Assets PRD) — this row is a synchronized mirror, keyed by the immutable
+    `external_id`. Local id/slug/name may exist independently, but lifecycle
+    mutations (create/rename/archive/reactivate) must go through
+    app/skunkbox_client.py first; see app/routes/tenants.py.
+    """
     __tablename__ = "tenant"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -16,6 +23,13 @@ class Tenant(db.Model):
     slug = db.Column(db.String(120), unique=True, nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     is_protected = db.Column(db.Boolean, nullable=False, default=False)
+    # skunkBOX Tenant.public_id — the only identifier ever exchanged
+    # cross-system. Immutable once set: no route may update this column.
+    external_id = db.Column(db.String(36), unique=True, nullable=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+    sync_status = db.Column(db.String(20), nullable=False, default="unsynced")
+    # unsynced | synced | error — surfaced in the admin UI; never used to
+    # decide authorization, only to show reconciliation state.
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -252,7 +266,16 @@ class ApiRequestLog(db.Model):
 
 
 class AiAgent(db.Model):
-    """A configured AI agent that proxies to a skunkBOX agent via an Integration."""
+    """A configured AI agent that proxies to a skunkBOX agent via an Integration.
+
+    A row is either tenant-owned (`is_shared=False`, created by hand in
+    System Config → AI Agents) or a system-managed mirror of a Cofficiency
+    Shared skunkBOX Agent (`is_shared=True`, upserted by
+    app/services/agent_sync.py — never created/edited through the admin UI).
+    Both kinds share `tenant_id`: for a Shared mirror this is the CUSTOMER
+    tenant using it, not Cofficiency, so conversations/messages/ownership
+    checks need no special-casing (see app/routes/agents.py new_conversation).
+    """
     __tablename__ = "ai_agent"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -263,12 +286,22 @@ class AiAgent(db.Model):
     skunkbox_agent_id = db.Column(db.Integer, nullable=False)
     avatar_filename = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # True for a system-managed mirror of a Cofficiency Shared skunkBOX
+    # Agent; never set by the admin UI. See app/services/agent_sync.py.
+    is_shared = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     tenant = db.relationship("Tenant", backref=db.backref("ai_agents", lazy="dynamic"))
     integration = db.relationship("Integration", backref=db.backref("ai_agents", lazy="dynamic"))
     conversations = db.relationship("AgentConversation", backref="agent", lazy="dynamic")
+
+    __table_args__ = (
+        # One local row per (tenant, skunkBOX agent) — whether tenant-owned
+        # or a Shared mirror — so a tenant can never end up with ambiguous
+        # duplicate local ownership of the same skunkBOX Persona.
+        db.UniqueConstraint("tenant_id", "skunkbox_agent_id", name="uq_ai_agent_tenant_skunkbox_agent"),
+    )
 
 
 class AgentConversation(db.Model):
@@ -332,6 +365,37 @@ class MessageAttachment(db.Model):
     created_at             = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     message = db.relationship("AgentMessage", backref=db.backref("attachments", lazy="dynamic"))
+
+
+class Experiment(db.Model):
+    """Minimal local record of an Experiment run in skunkBOX — exists only
+    because skunkBOX's Phase 4 management API has no `GET /experiments`
+    list endpoint, so Cophy has no other way to show a history list.
+
+    Deliberately does NOT store status, progress, metrics, or results —
+    those are always live-fetched from skunkBOX by `skunkbox_experiment_id`
+    (Cross-System Tenant AI Assets PRD Phase 7: "Do not recreate ...
+    evaluation state machines locally"). This row is UI continuity only.
+    """
+    __tablename__ = "experiment"
+
+    id                      = db.Column(db.Integer, primary_key=True)
+    tenant_id               = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False)
+    skunkbox_experiment_id  = db.Column(db.Integer, nullable=False)
+    skunkbox_component_id   = db.Column(db.Integer, nullable=False)
+    skunkbox_component_version_id = db.Column(db.Integer, nullable=False)
+    skunkbox_dataset_id     = db.Column(db.Integer, nullable=False)
+    skunkbox_dataset_version_id   = db.Column(db.Integer, nullable=False)
+    description             = db.Column(db.String(255), nullable=True)
+    created_by_user_id      = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at              = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    tenant = db.relationship("Tenant", backref=db.backref("experiments", lazy="dynamic"))
+    created_by = db.relationship("User", foreign_keys=[created_by_user_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("tenant_id", "skunkbox_experiment_id", name="uq_experiment_tenant_skunkbox_experiment"),
+    )
 
 
 class NavSection(db.Model):

@@ -75,6 +75,9 @@
   <div>
     <h1 class="page-title" style="font-size:22px">{{ title }}</h1>
     <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+      {% if doc.get('is_shared') %}
+      <span class="badge text-bg-blue-lt" title="Shared by Cofficiency — read-only">Shared</span>
+      {% endif %}
       {% if ftype %}
       <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;
                    background:var(--panel-muted);color:var(--muted);

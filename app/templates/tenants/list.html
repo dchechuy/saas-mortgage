@@ -7,6 +7,9 @@
     <h1 class="page-title">Tenant Management</h1>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
+    <form method="post" action="{{ url_for('tenants.sync_tenants') }}" style="margin:0">
+      <button type="submit" class="btn btn-secondary">Sync with skunkBOX</button>
+    </form>
     <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTenantModal">+ Add Tenant</button>
   </div>
 </div>
@@ -21,6 +24,7 @@
           <th>Name</th>
           <th>Slug</th>
           <th>Status</th>
+          <th>skunkBOX Sync</th>
           <th>Created</th>
           <th class="w-1">Actions</th>
         </tr>
@@ -39,6 +43,17 @@
             <span class="badge {{ 'text-bg-green-lt' if tenant.is_active else 'text-bg-secondary-lt' }}">
               {{ 'Active' if tenant.is_active else 'Archived' }}
             </span>
+          </td>
+          <td>
+            <span class="badge {{ {'synced': 'text-bg-green-lt', 'unsynced': 'text-bg-yellow-lt', 'error': 'text-bg-red-lt'}[tenant.sync_status] }}"
+                  title="{{ tenant.external_id }}">
+              {{ tenant.sync_status | capitalize }}
+            </span>
+            {% if tenant.last_synced_at %}
+            <div class="text-secondary" style="font-size:11px;margin-top:2px">
+              <span class="local-time" data-utc="{{ tenant.last_synced_at.isoformat() }}">{{ tenant.last_synced_at.strftime('%b %d, %Y %H:%M') }}</span>
+            </div>
+            {% endif %}
           </td>
           <td class="text-secondary">
             <span class="local-time" data-utc="{{ tenant.created_at.isoformat() }}">{{ tenant.created_at.strftime('%b %d, %Y') }}</span>

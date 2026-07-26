@@ -15,3 +15,10 @@ class Config:
     AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, "app", "static", "uploads", "avatars")
     AGENT_AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, "app", "static", "uploads", "agent_avatars")
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+
+    # skunkBOX service client (Cross-System Tenant AI Assets, Phase 5) — the
+    # Cophy-side service credential, distinct from any per-tenant Integration
+    # API key. Never logged; see app/skunkbox_client.py.
+    SKUNKBOX_BASE_URL = os.environ.get("SKUNKBOX_BASE_URL", "http://localhost:5000")
+    SKUNKBOX_SERVICE_SECRET = os.environ.get("SKUNKBOX_SERVICE_SECRET", "")
+    SKUNKBOX_CLIENT_TIMEOUT = float(os.environ.get("SKUNKBOX_CLIENT_TIMEOUT", "10"))

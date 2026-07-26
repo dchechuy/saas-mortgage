@@ -108,3 +108,35 @@ def require_tenant_record(record) -> None:
     active_id = get_active_tenant_id()
     if active_id is None or getattr(record, "tenant_id", None) != active_id:
         abort(404)
+
+
+class MissingTenantExternalIdError(Exception):
+    """Raised by require_active_tenant_external_id when there's no
+    server-resolved active tenant, or it has no skunkBOX external_id yet.
+    A future cross-system call (customer asset/quality management, Phase 6+)
+    must treat this as a hard stop — never fall back to a locally-invented
+    or browser-supplied tenant id (PRD Phase 5: "A missing UUID blocks the
+    cross-system operation safely")."""
+
+
+def get_active_tenant_external_id(user=None) -> str | None:
+    """The active tenant's skunkBOX external_id, resolved entirely
+    server-side via get_active_tenant() — never from a request header, form
+    field, or query string. This is the only sanctioned source of tenant
+    identity for a future skunkBOX customer-management API call; per-tenant
+    Integration credentials remain defense in depth alongside it, not a
+    replacement (see docs/ARCHITECTURE.md "skunkBOX interim boundary")."""
+    tenant = get_active_tenant(user)
+    return tenant.external_id if tenant else None
+
+
+def require_active_tenant_external_id(user=None) -> str:
+    """Same as get_active_tenant_external_id, but raises instead of
+    returning None — for a call site where proceeding without one would be
+    unsafe. Do not catch this broadly and substitute a fallback value."""
+    external_id = get_active_tenant_external_id(user)
+    if not external_id:
+        raise MissingTenantExternalIdError(
+            "No skunkBOX-synced active tenant is available for this request."
+        )
+    return external_id

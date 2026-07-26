@@ -410,11 +410,15 @@ def test_global_surfaces_remain_global(full_app, client):
 
 
 # 13. Inactive tenants cannot be selected or receive new data.
-def test_inactive_tenants_cannot_be_selected_or_receive_data(full_app, client):
+def test_inactive_tenants_cannot_be_selected_or_receive_data(full_app, client, fake_skunkbox):
     _ensure_baseline_permissions(full_app)
     w = _build_world(full_app)
     _set_password(full_app, "admin", "Test-1234")
     _login(client, "admin", "Test-1234")
+
+    with full_app.app_context():
+        cb = db.session.get(Tenant, w["customer_b_id"])
+        fake_skunkbox.seed("Customer B", "customer-b", external_id=cb.external_id)
 
     client.post(f"/tenants/{w['customer_b_id']}/archive", follow_redirects=True)
 

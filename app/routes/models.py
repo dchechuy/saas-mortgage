@@ -408,6 +408,12 @@ def add_agent():
     if not active_tenant or not active_tenant.is_active:
         flash("Cannot add an agent: no active tenant workspace is available.", "error")
         return _redirect_to_system_config("agents")
+    if active_tenant.sync_status != "synced":
+        flash(
+            "Cannot add an agent: the active tenant is not synchronized with skunkBOX. "
+            "Run tenant reconciliation and try again.", "error",
+        )
+        return _redirect_to_system_config("agents")
 
     name = request.form.get("name", "").strip()
     integration_id = request.form.get("integration_id", "").strip()
@@ -419,6 +425,14 @@ def add_agent():
         skunkbox_agent_id = int(skunkbox_agent_id_raw)
     except ValueError:
         flash("skunkBOX agent ID must be an integer.", "error")
+        return _redirect_to_system_config("agents")
+
+    if AiAgent.query.filter_by(tenant_id=active_tenant.id, skunkbox_agent_id=skunkbox_agent_id).first():
+        flash(
+            f"An agent already exists for skunkBOX agent ID {skunkbox_agent_id} "
+            f"(possibly a Shared Agent mirror) — cannot create a second local agent for the same id.",
+            "error",
+        )
         return _redirect_to_system_config("agents")
 
     integration = Integration.query.filter_by(
@@ -451,6 +465,9 @@ def add_agent():
 def save_agent(agent_id):
     agent = db.get_or_404(AiAgent, agent_id)
     require_tenant_record(agent)
+    if agent.is_shared:
+        flash("This is a Shared Agent managed by Cofficiency and cannot be edited here.", "error")
+        return _redirect_to_system_config("agents")
     name = request.form.get("name", "").strip()
     integration_id = request.form.get("integration_id", "").strip()
     skunkbox_agent_id_raw = request.form.get("skunkbox_agent_id", "").strip()
@@ -461,6 +478,16 @@ def save_agent(agent_id):
         skunkbox_agent_id = int(skunkbox_agent_id_raw)
     except ValueError:
         flash("skunkBOX agent ID must be an integer.", "error")
+        return _redirect_to_system_config("agents")
+
+    if skunkbox_agent_id != agent.skunkbox_agent_id and AiAgent.query.filter_by(
+        tenant_id=agent.tenant_id, skunkbox_agent_id=skunkbox_agent_id
+    ).first():
+        flash(
+            f"An agent already exists for skunkBOX agent ID {skunkbox_agent_id} "
+            f"(possibly a Shared Agent mirror) — cannot point two local agents at the same id.",
+            "error",
+        )
         return _redirect_to_system_config("agents")
 
     integration = Integration.query.filter_by(
@@ -491,6 +518,9 @@ def save_agent(agent_id):
 def toggle_agent(agent_id):
     agent = db.get_or_404(AiAgent, agent_id)
     require_tenant_record(agent)
+    if agent.is_shared:
+        flash("This is a Shared Agent managed by Cofficiency and cannot be activated/deactivated here.", "error")
+        return _redirect_to_system_config("agents")
     agent.is_active = not agent.is_active
 
     if not agent.is_active:

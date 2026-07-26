@@ -4,6 +4,8 @@ Numbered to match docs/prompts/Tenant Separation - Prompt - Phase 2 - saas-mortg
 section 'Tests'. Uses the `full_app`/`client` fixtures (the real app, not the
 bare Phase 1 model-test app) since this phase is about routes and web flows.
 """
+import uuid
+
 from app.extensions import db
 from app.models import Tenant, User, UserActivityLog
 from app.tenant_context import can_switch_tenants, get_active_tenant, get_active_tenant_id
@@ -55,7 +57,8 @@ def test_cofficiency_user_default_resolution(full_app):
         db.session.commit()
         assert get_active_tenant(admin).slug == "cofficiency"
 
-        archived = Tenant(name="Archived Co", slug="archived-co", is_active=False)
+        archived = Tenant(name="Archived Co", slug="archived-co", is_active=False,
+                          external_id=str(uuid.uuid4()), sync_status="synced")
         db.session.add(archived)
         db.session.commit()
         admin.last_active_tenant_id = archived.id
@@ -176,7 +179,7 @@ def test_permissions_still_apply_after_switching(full_app, client):
 
 
 # 9. Cofficiency admin can create/archive/reactivate a customer tenant.
-def test_cofficiency_admin_can_create_archive_reactivate(full_app, client):
+def test_cofficiency_admin_can_create_archive_reactivate(full_app, client, fake_skunkbox):
     _set_password(full_app, "admin", "Test-1234")
     _login(client, "admin", "Test-1234")
 

@@ -5,6 +5,8 @@ data resembling a genuine pre-Phase-1 install (see tests/conftest.py), then
 assert the historical-ownership and schema invariants required by
 docs/prompts/Tenant Separation - Prompt - Phase 1 - saas-mortgage.md.
 """
+import uuid
+
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -106,7 +108,8 @@ def test_required_tenant_columns_are_non_null(app):
 
 def test_tenant_relative_uniqueness(app):
     advantagefirst = Tenant.query.filter_by(slug="advantagefirst").one()
-    acme = Tenant(name="Acme", slug="acme", is_active=True, is_protected=False)
+    acme = Tenant(name="Acme", slug="acme", is_active=True, is_protected=False,
+                 external_id=str(uuid.uuid4()), sync_status="synced")
     db.session.add(acme)
     db.session.commit()
 

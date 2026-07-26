@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}New Component - saas-mortgage{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div><h1 class="page-title">New Component</h1></div>
+</div>
+
+<div class="card" style="max-width:640px">
+  <div class="card-body">
+    <form method="post" action="{{ url_for('quality.add_component') }}">
+      <div class="mb-3">
+        <label class="form-label">Title</label>
+        <input type="text" name="title" class="form-control" required maxlength="255" placeholder="e.g. Income Verification">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-control" rows="3" placeholder="Optional"></textarea>
+      </div>
+      <div class="form-hint" style="margin-bottom:16px">
+        Fields, prompts, and schema can be edited after creation. A draft v1 version is created automatically.
+      </div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary">Create Component</button>
+        <a href="{{ url_for('quality.list_components') }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

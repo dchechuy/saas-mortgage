@@ -58,7 +58,12 @@
           <div class="agent-tile-initial">{{ agent.name[0].upper() }}</div>
           {% endif %}
           <div class="agent-tile-body">
-            <div class="agent-tile-name">{{ agent.name }}</div>
+            <div class="agent-tile-name">
+              {{ agent.name }}
+              {% if agent.is_shared %}
+              <span class="badge text-bg-blue-lt" style="font-size:10px;margin-left:4px" title="Shared by Cofficiency — read-only">Shared</span>
+              {% endif %}
+            </div>
             {% if agent.description %}
             <div class="agent-tile-desc">{{ agent.description }}</div>
             {% endif %}
@@ -574,7 +579,12 @@ async function toggleFavorite(btn) {
                 <div class="agent-tile-initial" style="font-size:52px">{{ agent.name[0].upper() }}</div>
                 {% endif %}
                 <div class="agent-tile-body">
-                  <div class="agent-tile-name" style="font-size:14px">{{ agent.name }}</div>
+                  <div class="agent-tile-name" style="font-size:14px">
+                    {{ agent.name }}
+                    {% if agent.is_shared %}
+                    <span class="badge text-bg-blue-lt" style="font-size:10px;margin-left:4px" title="Shared by Cofficiency — read-only">Shared</span>
+                    {% endif %}
+                  </div>
                   {% if agent.description %}
                   <div class="agent-tile-desc" style="font-size:12px">{{ agent.description }}</div>
                   {% endif %}

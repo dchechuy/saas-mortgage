@@ -417,6 +417,62 @@ Notes:
 
 ---
 
+### AI Quality — AI Assets, Datasets, and Experiments
+**Purpose:**
+Manage your tenant's Components ("AI Assets" — the prompts/fields/schema an
+AI Agent runs against), Datasets, and Experiments/evaluation results,
+without needing direct access to skunkBOX.
+
+**Who can use it:**
+Users with the AI Assets, Datasets, and/or AI Quality permissions
+(separately grantable — view or edit — like every other page). Your
+Cofficiency contact must also enable the "AI Assets & Quality" feature flag
+for your tenant first; if you don't see "AI Assets" / "Datasets" / "AI
+Quality" in the left navigation, ask them to turn it on (System Config →
+Feature Flags, on the *Cofficiency* side).
+
+**How to use it:**
+1. **AI Assets** — "+ New Component" to create one (title + description; a
+   draft v1 version is created automatically). Open a Component to edit its
+   title, description, system prompt, JSON schema, formatting requirements,
+   release notes, and — while the draft is unlocked — its prompt, output
+   fields, and justification prompt. Promote Draft → Release, then
+   Release → Production, when it's ready to be used in an Experiment (only
+   Release/Production versions are eligible). Archive/Reactivate as needed;
+   archived Components stay visible for history but can't be used in new
+   Experiments.
+2. **Datasets** — "+ New Dataset" to create one (name, optional description,
+   Labeled/Unlabeled). Open a Dataset and use "Import CSV" to upload a file
+   — the header row becomes the column names. Each import replaces the
+   *current* version; skunkBOX keeps the import history. Archive when
+   retired.
+3. **AI Quality** — "+ New Experiment": pick a Component version (Release or
+   Production only), a Dataset (must already have an imported version), and
+   a Model ID (ask your Cofficiency contact if you don't have this), then
+   start the run. The Experiment page shows live status/progress and
+   refreshes automatically while running; once finished, it lists per-record
+   results, evaluation scores, and any errors.
+
+**Key features:**
+- Every list only ever shows your own tenant's Components/Datasets/
+  Experiments — a forged or guessed id for another tenant's record is
+  rejected the same way a nonexistent one would be, so it never confirms
+  whether something exists elsewhere.
+- Some Component fields (system prompt, JSON schema, formatting
+  requirements) are write-only in this version — after saving, the field
+  shows blank again on reload rather than the value you just set. This is a
+  current limitation of the underlying API, not a sign your save failed.
+- A Component's draft version becomes locked (no further prompt edits) once
+  it's been used in an Experiment.
+- There's no "delete" for Components/Datasets — only Archive, which
+  preserves history and is reversible.
+- Switching your active tenant (Cofficiency users only) immediately stops
+  you from seeing a previous tenant's Experiment, even one still running —
+  its status page and progress polling both stop working the moment you
+  switch, rather than continuing to show stale data.
+
+---
+
 ### User Guides / Help
 **Purpose:**  
 Provides help for common tasks like logging in, password changes, and navigating the platform. Also covers troubleshooting basics and where to get support.
