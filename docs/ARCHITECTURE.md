@@ -92,6 +92,29 @@ authenticated AND existing page/action permission AND record.tenant_id == active
   `app/feature_flags.py`; a disabled feature is enforced at the route level
   via `access.feature_required(key)`, not just by hiding its nav item.
 
+### What "Shared" means (read this before touching any Shared-related code)
+
+**Shared always means "Cofficiency-owned and read/use-only for every other
+tenant" — never joint ownership, never editable by the tenant using it,
+never a merge of two tenants' data.** A knowledge collection or Agent has
+exactly one owner (`tenant_id`), which for a Shared resource is always
+Cofficiency; `is_shared=true` grants every *other* active tenant read/use
+access to that one Cofficiency-owned row, it does not create a second
+owner or a copy. Concretely in this codebase:
+- A Shared `AiAgent` mirror row (`is_shared=True`) is a **per-tenant,
+  read-only pointer** to a Cofficiency Persona — each tenant that uses it
+  gets its own local row (so conversations/FKs work normally), but none of
+  those rows are editable, and none of them make the underlying skunkBOX
+  Persona jointly owned.
+- A Shared knowledge collection's documents are never copied into a
+  tenant's own collection — a document has exactly one collection, full
+  stop (PRD §10.2); "using" a Shared collection means reading it live from
+  skunkBOX, not acquiring a copy.
+- Mutating a Shared resource on behalf of a customer is refused everywhere
+  in this repo, and independently refused by skunkBOX itself — see
+  `docs/TENANT_ISOLATION_AUDIT.md`'s Cross-System section for the specific
+  code paths and tests.
+
 ### skunkBOX interim boundary
 
 For chat, attachments, and Learning Center/knowledge-base calls, skunkBOX

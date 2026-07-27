@@ -97,20 +97,21 @@ def sync_shared_agents_for_tenant(tenant) -> dict:
 
     # A previously-mirrored Shared Agent that's no longer visible (unshared,
     # archived) is deactivated, never deleted — existing conversations keep
-    # a valid AiAgent to point at. Skipped entirely when skunkBOX returned
-    # zero *total* agents (not just zero shared ones) — almost certainly a
-    # transient/misconfigured response, not evidence every Shared Agent was
-    # unshared at once (same reasoning as tenant_sync.run_reconciliation's
-    # local_only guard).
-    stale = (
-        AiAgent.query.filter(
-            AiAgent.tenant_id == tenant.id,
-            AiAgent.is_shared.is_(True),
-            AiAgent.is_active.is_(True),
-            ~AiAgent.skunkbox_agent_id.in_(seen_ids),
-        ).all()
-        if remote_agents else []
-    )
+    # a valid AiAgent to point at. Unlike tenant_sync.run_reconciliation's
+    # analogous "skip on empty response" guard, an empty *visible-agents*
+    # response is NOT treated as evidence of a transient/misconfigured
+    # fetch: by this point list_agents() already succeeded without raising
+    # (a real fetch failure returned early above), and a tenant legitimately
+    # having zero visible Shared Agents is the normal starting state for
+    # every tenant, not a red flag — a tenant list going to zero would be
+    # (skunkBOX always has at least Cofficiency itself), so the two guards
+    # are deliberately NOT symmetric.
+    stale = AiAgent.query.filter(
+        AiAgent.tenant_id == tenant.id,
+        AiAgent.is_shared.is_(True),
+        AiAgent.is_active.is_(True),
+        ~AiAgent.skunkbox_agent_id.in_(seen_ids),
+    ).all()
     for agent in stale:
         agent.is_active = False
         summary["deactivated"] += 1

@@ -84,14 +84,14 @@ def _request(method: str, path: str, idempotency_key: str | None = None,
         except requests.exceptions.RequestException as exc:
             last_exc = exc
             log.warning(
-                "skunkbox_client: %s %s failed (attempt %d/%d): %s",
-                method, path, attempt + 1, attempts, exc.__class__.__name__,
+                "skunkbox_client: %s %s failed (attempt %d/%d) tenant=%s: %s",
+                method, path, attempt + 1, attempts, tenant_id or "-", exc.__class__.__name__,
             )
             continue
 
         if resp.status_code >= 500 and retry and attempt < attempts - 1:
-            log.warning("skunkbox_client: %s %s returned %d, retrying once",
-                       method, path, resp.status_code)
+            log.warning("skunkbox_client: %s %s returned %d tenant=%s, retrying once",
+                       method, path, resp.status_code, tenant_id or "-")
             continue
 
         try:

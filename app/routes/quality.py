@@ -35,7 +35,17 @@ _MAX_IMPORT_ROWS = 5000
 def _tenant_ext_id_or_flash():
     """Resolve the active tenant's skunkBOX UUID, or flash a safe error and
     return None. Every mutating/reading route below bails out the same way
-    on a missing/unsynced tenant rather than risking a raw 500."""
+    on a missing/unsynced/archived tenant rather than risking a raw 500 or
+    an unclean skunkBOX `tenant_inactive` error surfacing directly.
+
+    skunkBOX independently rejects an archived tenant's UUID either way
+    (403 tenant_inactive) — this check is defense-in-depth for a clean
+    message, not the sole enforcement point, matching the same
+    active-tenant check already used by add_user/add_agent (Phase 5/6)."""
+    active_tenant = get_active_tenant()
+    if active_tenant and not active_tenant.is_active:
+        flash("This workspace has been archived and can no longer be used.", "error")
+        return None
     try:
         return require_active_tenant_external_id()
     except MissingTenantExternalIdError:

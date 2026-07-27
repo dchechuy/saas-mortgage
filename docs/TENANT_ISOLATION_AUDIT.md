@@ -101,8 +101,12 @@ For each tenant-owned model:
 ## Explicitly deferred (out of scope per the PRD)
 
 - **Calls**: feature does not exist yet; PRD requires it be tenant-owned when built.
-- **Components / AI Assets**: blocked on a tenant-aware skunkBOX management API that doesn't exist yet.
-- **skunkBOX tenant-ID contract**: isolation remains indirect (tenant-owned Integration credentials) by design; no speculative tenant field is sent to skunkBOX.
+
+The two items formerly listed here — "Components / AI Assets" and "the
+skunkBOX tenant-ID contract" — are no longer deferred. Both were built by
+the separate, later **Cross-System Tenant AI Assets PRD** (Phases 5–7 on
+this repo's side); see the dedicated audit section below, added for that
+PRD's own Phase 8 ("cross-system audit and rollout").
 
 ## No global query hook
 
@@ -159,3 +163,225 @@ this existing (missing) convention exactly rather than introducing a
 one-off inconsistency. Adding CSRF protection is a cross-cutting change
 affecting every POST form in the app and is out of scope for tenant
 separation; flagging it here so it isn't mistaken for a tenant-specific gap.
+Still true as of the Cross-System audit below — no form added by Phases
+5–7 (`quality.py`, `tenants.py`, `users.py`, `models.py`) carries a CSRF
+token either, matching this same pre-existing convention.
+
+---
+
+# Cross-System Tenant AI Assets — Cophy-side Ownership Audit (Phase 8)
+
+Separate PRD from Tenant Separation above (`docs/prompts/Cross-System
+Tenant AI Assets - PRD.md`, Phases 1–7 completed on the saas-platform side
+and Phases 5–7 on this repo). Covers everything added since the audit
+above was written: skunkBOX becoming the authoritative tenant registry,
+Shared knowledge/Agent read access, and Components/Datasets/AI Quality
+management. See `saas-platform/docs/TENANT_ISOLATION_AUDIT.md` (produced
+alongside this one, as part of this same Phase 8 pass) for the skunkBOX-side
+classification of the same PRD's models and its own findings — most
+notably **G1**: `mcp_server/server.py`'s `query_experiments`/`create_dataset`
+MCP tools had no tenant filter at all, a real cross-tenant data-disclosure
+path reachable through a Shared evaluator/summary Persona used by any
+tenant's Experiment. Fixed and tested on the skunkBOX side this phase
+(`tests/test_mcp_tenant_scoping.py`) — flagged here because it directly
+affects this repo's own "Shared Agents are read/use only" guarantee: a
+Shared Agent with `query_experiments`/`create_dataset` attached could
+previously have returned another tenant's data through a conversation
+started from Cophy, even though Cophy's own tenant-scoping was correct
+end-to-end. No Cophy-side code change was needed — the fix is entirely in
+how skunkBOX threads tenant context into its own background/MCP tool
+execution.
+
+## Model classification (Cophy side)
+
+| Model | Bucket | Reason |
+|---|---|---|
+| `Tenant` | Local mirror of an authoritative record | No longer authoritative (PRD §6.2) — `external_id` maps to skunkBOX `Tenant.public_id`; `sync_status`/`last_synced_at` track mirror freshness. Local `id` and FK relationships (`User.tenant_id`, etc.) are unaffected — this repo's own tenant isolation still keys off the local integer id, same as the Tenant Separation audit above. |
+| `AiAgent` | Mixed: tenant-owned (`is_shared=False`) + system-managed mirror of Cofficiency-owned-Shared (`is_shared=True`) | A `is_shared=True` row is a **local, per-tenant pointer** to a skunkBOX Shared Persona, not itself shared/joint-owned — its `tenant_id` is always the customer using it, never Cofficiency's. See `app/services/agent_sync.py`. |
+| `Experiment` | Tenant-owned, minimal mirror | Required `tenant_id`; exists solely for UI continuity (skunkBOX has no experiment-list endpoint) — see `app/models.py`'s `Experiment` docstring. Never shared. |
+| Components / Datasets (skunkBOX-side) | Not mirrored at all | Cophy holds zero local rows for these — every read/write proxies live through `app/skunkbox_client.py` with the active tenant's UUID; skunkBOX is the sole source of truth and sole enforcement point. |
+| Knowledge collections / documents (skunkBOX-side) | Not mirrored at all | Same as above — `app/routes/agents.py` Learning Center routes are a stateless proxy (old per-tenant `Integration`/API-key path for content, new management-API path for the collection list/labels); no local `Document`/`DocumentCollection` table exists in this repo. |
+| `Integration` (`use_case="AI Agents"` rows used by Shared mirrors) | Tenant-owned (pre-existing) | Unchanged by this PRD — a Shared Agent mirror still authenticates through the *customer's own* Integration row, never a Cofficiency credential, so no new sharing semantics were introduced to this model. |
+
+## New/changed surfaces, request-reachable
+
+### `app/skunkbox_client.py` (the service-credential HTTP client)
+Every function takes a `tenant_id` (the skunkBOX UUID) as an explicit,
+mandatory parameter — there is no "current tenant" global state or
+implicit fallback inside this module. Every call site resolves that
+argument via `tenant_context.require_active_tenant_external_id()` /
+`get_active_tenant_external_id()`, which read only the server-resolved
+active tenant (`tenant_context.get_active_tenant()`) — never a request
+header, form field, session value, or query string. Verified by grep: no
+call site in `app/routes/quality.py`, `app/routes/tenants.py`, or
+`app/services/agent_sync.py` passes anything from `request.*` as the
+`tenant_id` argument. `tests/test_cross_system_tenant_sync.py::test_get_active_tenant_external_id_ignores_request_data`
+proves this directly by injecting a forged `X-Tenant-Id` header and query
+param and confirming the resolved UUID is unaffected.
+
+Cross-tenant/forged resource ids (component id, dataset id, experiment id,
+collection id, agent id) are never independently re-validated by Cophy —
+they're passed straight through with the correct tenant UUID, and skunkBOX
+itself 404s a mismatch. This is a deliberate "thin proxy, single
+enforcement point" design (matching the "Cophy calls only documented
+skunkBOX domain APIs... does not recreate ... state machines locally"
+instruction), not a gap — the alternative (Cophy maintaining its own
+shadow ownership table for records it doesn't otherwise store) would be a
+second, harder-to-keep-correct enforcement point. `Experiment` is the one
+exception with a real local row, and it uses the standard
+`require_tenant_record()` pattern (see below).
+
+### `app/routes/quality.py` (Components / Datasets / Experiments)
+- Every route resolves the active tenant's UUID via `_tenant_ext_id_or_flash()`
+  → `require_active_tenant_external_id()`; a missing/unsynced tenant fails
+  closed (flash + no skunkBOX call), never falls back to a guessed value.
+- `view_component`/`save_component`/`promote_component`/`archive_component`/
+  `reactivate_component`, and the Dataset equivalents, all catch a `404`
+  `SkunkBoxClientError` and `abort(404)` locally — a cross-tenant/forged id
+  produces the same 404 a customer would see for a typo'd id, no
+  existence disclosure.
+- `view_experiment`/`experiment_status` are the one place with a **local**
+  ownership check: `require_tenant_record(experiment)` (view) and an
+  inline `experiment.tenant_id != get_active_tenant_id()` check (status
+  poll, since it returns JSON not an abort) — both run *before* any
+  skunkBOX call, so a cross-tenant local experiment id never even reaches
+  the client with the wrong tenant UUID. Covered by
+  `tests/test_ai_quality.py::test_cross_tenant_experiment_id_404s`,
+  `test_switching_active_tenant_invalidates_open_experiment_poll`.
+- `new_experiment`'s picker (`GET`) only ever lists the active tenant's own
+  Components/Datasets (via `skunkbox_client.list_components`/`list_datasets`,
+  both tenant-scoped server-side) — there is no cross-tenant option to even
+  select by mistake. `tests/test_ai_quality.py::test_experiment_picker_only_offers_same_tenant_resources`.
+- Dataset CSV import: file is read and parsed entirely server-side; the
+  parsed `rows` are sent to skunkBOX over the existing tenant-scoped
+  `import_dataset_rows()` call — no separate tenant check needed since the
+  target `dataset_id` already goes through the same 404-on-mismatch path
+  as every other Dataset route.
+- No hard-delete, optimizer, or internal-audit route exists anywhere in
+  this blueprint — archive/reactivate (soft state) is the only lifecycle
+  mutation, matching what skunkBOX's management API itself exposes.
+  `tests/test_ai_quality.py::test_no_delete_or_optimizer_routes_exist_under_quality`
+  asserts this structurally (no `DELETE` method, no `optimizer`/`delete`
+  substring in any `/quality/*` rule).
+
+### `app/services/agent_sync.py` (Shared Agent mirroring)
+- `sync_shared_agents_for_tenant(tenant)` only ever upserts local `AiAgent`
+  rows scoped to the **tenant passed in** — it is called once per request
+  with the current request's own active tenant (`app/routes/agents.py`
+  `list_conversations()`), never in a loop over "all tenants," so there is
+  no code path where one tenant's sync could write a row under another's
+  `tenant_id`.
+- Ambiguous-ownership guard: `(tenant_id, skunkbox_agent_id)` is a DB-level
+  unique constraint (`uq_ai_agent_tenant_skunkbox_agent`,
+  `migrations/versions/k1l2m3n4o5p6_add_ai_agent_is_shared.py`) — even a
+  future code bug attempting to create a second local row for a
+  `skunkbox_agent_id` a tenant already has mirrored/owns raises an
+  `IntegrityError` rather than silently succeeding; the service layer
+  catches this per-row and reports a conflict instead of crashing the
+  whole sync.
+- A Shared mirror's underlying chat calls still authenticate with the
+  *customer's own* `Integration` row (never a Cofficiency credential) —
+  confirmed by construction: `sync_shared_agents_for_tenant()` requires
+  `Integration.query.filter_by(tenant_id=tenant.id, use_case="AI Agents", ...)`
+  and skips creating any mirror at all if the tenant has none.
+- `app/routes/models.py` `save_agent`/`toggle_agent` reject any mutation of
+  an `is_shared=True` row before touching the database — a customer cannot
+  repoint or deactivate a Shared mirror to affect other tenants' view of
+  the same underlying skunkBOX Agent (there's nothing shared to affect;
+  each tenant has its own independent mirror row, but the guard exists so
+  a customer can't be misled into thinking they're editing "their" copy of
+  a Cofficiency-managed Agent).
+
+### `app/services/tenant_sync.py` (tenant lifecycle reconciliation — Phase 5, re-confirmed for Phase 8)
+- `run_reconciliation()` never deletes a local `Tenant` row and never
+  rewrites `User.tenant_id` — a tenant no longer returned by skunkBOX is
+  flagged `sync_status='error'`, not removed, so no FK referencing it ever
+  dangles and no user's home-tenant assignment can be silently reassigned
+  by a sync run.
+- Name/slug collision with a *different* `external_id` raises
+  `TenantSyncError` and is reported as a conflict rather than guessed —
+  never silently renames/reslugs over an existing local tenant.
+- Skips the "flag tenants missing from skunkBOX" pass entirely when the
+  remote response was empty (`if remote_tenants else []` in
+  `run_reconciliation`), so a transient/misconfigured empty API response
+  can't be misread as "every tenant was deleted upstream" and mass-flag
+  every local tenant `sync_status='error'`.
+
+## Bulk operations / raw SQL / background surfaces
+- No raw SQL (`db.session.execute(text(...))`) touches any tenant-owned
+  table introduced by this PRD — every Components/Datasets/Experiments
+  read/write goes through the ORM `Experiment` model or the
+  `skunkbox_client` HTTP layer, neither of which has a raw-SQL path.
+- No background worker/job exists on the Cophy side for this PRD —
+  `sync_shared_agents_for_tenant()` and Learning Center's document fetch
+  are both synchronous, in-request calls (same "always live, no scheduled
+  job" pattern as pre-existing Learning Center), so there is no
+  stale-tenant-context risk from a job outliving the request that enqueued
+  it. (skunkBOX's own Experiment background thread is audited on the
+  skunkBOX side, not here — see that repo's Phase 8 audit.)
+- The one bulk-ish operation, `run_reconciliation()`'s per-remote-tenant
+  upsert loop, commits and error-isolates one row at a time specifically
+  so one bad/conflicting row can't roll back or block the others — see
+  `app/services/tenant_sync.py`.
+
+## Exports, reports, aggregates, counts
+- No dashboard/report/export in this repo aggregates across
+  Components/Datasets/Experiments/knowledge — Cophy holds no local copies
+  of the first three at all, and the `Experiment` list page
+  (`quality.list_experiments`) is a plain tenant-filtered `Experiment.query.filter_by(tenant_id=...)`
+  with no cross-tenant aggregate anywhere in the query or template.
+- Reporting (`app/routes/reporting.py`, audited above for the Tenant
+  Separation PRD) was not touched by this PRD and does not reference any
+  Components/Datasets/Experiments/knowledge data.
+
+## Secret handling
+- `SKUNKBOX_SERVICE_SECRET` is read only inside `app/skunkbox_client.py`'s
+  `_secret()`, placed only in the outbound `X-Service-Secret` header, and
+  never logged (`log.warning` calls in `_request()` log only
+  `exc.__class__.__name__` on failure, never headers or the exception's
+  full string in a way that could echo the secret) or passed to
+  `render_template`/`flash`. `tests/test_cross_system_tenant_sync.py::test_secret_never_appears_in_logs_on_failure`,
+  `tests/test_shared_knowledge_and_agents.py::test_service_secret_never_rendered_on_any_quality_page`
+  (Phase 6) and `tests/test_ai_quality.py::test_service_secret_never_rendered_on_any_quality_page`
+  (Phase 7) both assert this by configuring a known secret value and
+  scanning every relevant page's response body for it.
+
+## No global query hook (reconfirmed)
+Same convention as the Tenant Separation audit above — every check in this
+section is an explicit predicate, an explicit `abort(404)`/`require_tenant_record()`
+call, or delegated to skunkBOX's own server-side enforcement. No ORM-level
+global filter was introduced.
+
+---
+
+# Cross-System Tenant AI Assets — PRD Acceptance Mapping (Phase 8)
+
+Maps `docs/prompts/Cross-System Tenant AI Assets - PRD.md` §16 (Security)
+and §17 (Acceptance) to Cophy-side evidence. Full suite: 117 tests pass
+(`.venv/bin/python -m pytest -q`). See `saas-platform`'s own Phase 8
+documentation for the skunkBOX-side half of each criterion — most of these
+are jointly enforced by both systems, and this table only speaks to the
+Cophy side.
+
+| PRD § | Criterion | Status | Cophy-side evidence |
+|---|---|---|---|
+| §16.1 | skunkBOX independently enforces tenant access | ✅ (skunkBOX-side, re-confirmed here) | Cophy never second-guesses a skunkBOX 404 with its own broader/narrower check — see "New/changed surfaces" above. |
+| §16.2 | A Cophy tenant UUID alone is not authentication | ✅ | Every `skunkbox_client` call carries both the UUID *and* the service secret (`X-Service-Secret` + `X-Tenant-Id`); the UUID alone (e.g. a forged header on a request *to Cophy*) has no effect since Cophy never reads it from the request in the first place (see `get_active_tenant_external_id()` above). |
+| §16.3 | A tenant API key cannot assert another tenant | N/A (skunkBOX-side enforcement; Cophy doesn't issue/validate `SkunkApiKey`) | — |
+| §16.4 | A management service request cannot mutate shared Cofficiency resources for a customer | ✅ | Cophy's UI never exposes a mutation control on an `is_shared`/Shared row at all (Phase 6 templates hide edit/delete for `is_shared` `AiAgent`s and label Shared knowledge collections read-only); `app/routes/models.py` additionally rejects it server-side even if a form were forged. |
+| §16.5 | Cross-tenant IDs/slugs/filters return 404 or safe denial | ✅ | `tests/test_ai_quality.py::test_cross_tenant_component_id_404s_on_read_and_every_mutation`, `test_cross_tenant_dataset_id_404s`, `test_cross_tenant_experiment_id_404s`; `tests/test_shared_knowledge_and_agents.py` (Phase 6 knowledge/agent equivalents) |
+| §16.6 | Same-tenant validation applies to every relationship and worker job | ✅ | Experiment picker only offers same-tenant options (`test_experiment_picker_only_offers_same_tenant_resources`); no background worker exists Cophy-side (see above). |
+| §16.7 | Shared collections/Agents are read/use only outside Cofficiency | ✅ | See §16.4 evidence; also `tests/test_shared_knowledge_and_agents.py::test_shared_agent_cannot_be_edited_or_toggled`. |
+| §16.8 | Only Cofficiency can publish/unpublish shared resources | N/A (skunkBOX-side — the toggle lives in skunkBOX's admin UI, not Cophy) | — |
+| §16.9 | Unsharing validates dependencies and active use | N/A (skunkBOX-side) | — |
+| §16.10 | API logs record credential, actor, tenant, operation, target, outcome | Partial | Cophy's own `ApiRequestLog` (pre-existing, Tenant Separation PRD) records tenant/integration/endpoint/status for the *old* per-tenant chat/document path. The *new* `skunkbox_client.py` service-credential path has no equivalent Cophy-side log table yet — see the Observability section of the Phase 8 rollout doc for the gap and interim mitigation (skunkBOX's own `ApiRequestLog`/audit trail is the authoritative record for management-API calls either way, since it's the system actually executing them). |
+| §16.11 | Tenant archival blocks new API operations without erasing history | ✅ (skunkBOX-side enforcement) + Cophy-side: an unsynced/inactive tenant is blocked from creating new portal users/agents (`app/routes/users.py`, `app/routes/models.py`, Phase 5) | `tests/test_cross_system_tenant_sync.py::test_cannot_add_portal_user_when_active_tenant_unsynced` |
+| §16.12 | Cophy local mirror drift cannot grant access in skunkBOX | ✅ | Every skunkBOX call re-sends the tenant UUID and every mutation/read is re-validated by skunkBOX itself — a stale/incorrect local `Tenant.sync_status` or `AiAgent.is_shared` flag can only cause Cophy to show the *wrong UI state* (e.g. an offer to use an Agent that's since been unshared), never a successful unauthorized skunkBOX call, since skunkBOX independently re-checks visibility on every request regardless of what Cophy believed. |
+| §17.5 | Customer A cannot see/use Customer B private resources | ✅ | See §16.5 evidence. |
+| §17.6 | Customer tenants can see/use Shared Cofficiency collections and Agents | ✅ | `tests/test_shared_knowledge_and_agents.py::test_both_customers_see_shared_agent_neither_sees_others_private`, `test_both_customers_see_shared_collection_in_learning_center` |
+| §17.7 | Customers cannot mutate shared resources | ✅ | See §16.4/§16.7 evidence. |
+| §17.9 | A tenant Agent can combine tenant-private and Shared collections | Partial — verified at the skunkBOX/data level, not yet a Cophy UI feature | Combining collections on an Agent is a skunkBOX-side Persona configuration action (admin UI there); Cophy's Phase 6/7 scope is read/use, not authoring that association. Cophy correctly *displays* whichever collections a given Agent (owned or Shared) is already configured to use once Phase 9+/Components UI exposes it — no Cophy-side gap for the read path tested here. |
+| §17.12 | Customers can complete the agreed Component/version/dataset/experiment workflow in Cophy | ✅ | `tests/test_ai_quality.py` (17 tests, full workflow); browser smoke test (Phase 7 CHANGELOG entry). |
+| §17.13 | Background jobs and reports remain tenant-isolated | ✅ (N/A background jobs Cophy-side; reports unaffected — see above) | — |
+| §17.14 | Tenant lifecycle changes converge between skunkBOX and Cophy | ✅ | Phase 5 reconciliation (`run_reconciliation()`, manual sync button, `flask sync-tenants` CLI); UUID cross-check in `docs/MIGRATION_REHEARSAL.md` §2.3 confirms convergence on the real dev databases of both systems. |
+| §17.15 | Forged cross-tenant API requests fail inside skunkBOX | ✅ (skunkBOX-side, re-confirmed via Cophy's own tests hitting the fake client with forged ids and via the real API contract's documented 404 behavior) | — |
