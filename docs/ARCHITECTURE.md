@@ -205,6 +205,27 @@ edited/deactivated through the admin UI (`app/routes/models.py`
 when `sync_shared_agents_for_tenant()` next runs and the Agent is no longer
 visible (unshared, archived).
 
+### Customer Agent configuration
+
+skunkBOX Personas are authoritative for Agent fields, lifecycle, and
+knowledge associations. Cophy retains the mixed local-pointer model because
+conversations and chat Integrations require a local `AiAgent`:
+`is_shared=False` is tenant-owned and `is_shared=True` is a per-tenant,
+read-only pointer to a Cofficiency Shared Persona. The unique
+`(tenant_id, skunkbox_agent_id)` key remains; reconciliation updates owned
+and Shared pointers but never changes ownership type or deletes history.
+
+System Config mutations and collection replacement go through
+`app/skunkbox_client.py`. Eligible collections are returned by skunkBOX
+(tenant-owned plus Cofficiency Shared); Cophy derives the tenant UUID
+server-side and does not duplicate eligibility rules. Shared Agents expose
+no mutation, Shared-toggle, or hard-delete control.
+
+Every service-credential call writes a local `ApiRequestLog` with active
+tenant, operation/endpoint, target ID, status, latency, and returned
+correlation ID. Credentials and bodies are never stored. Audit failure is
+non-blocking in production and raised during tests.
+
 Phase 7 extends the same management-API path to Components (AI Assets),
 Datasets, and Experiments — `app/routes/quality.py` (blueprint `quality_bp`,
 `/quality/*`). Components and Datasets follow Learning Center's "thin proxy,

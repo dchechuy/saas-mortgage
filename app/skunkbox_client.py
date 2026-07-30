@@ -20,6 +20,7 @@ via tenant_context.require_active_tenant_external_id(), never from request
 input — so skunkBOX can apply its owned-or-shared visibility rule.
 """
 import logging
+import time
 
 import requests
 from flask import current_app
@@ -75,6 +76,7 @@ def _request(method: str, path: str, idempotency_key: str | None = None,
 
     attempts = 2 if retry else 1
     last_exc: Exception | None = None
+    started = time.monotonic()
     for attempt in range(attempts):
         try:
             resp = requests.request(
@@ -87,7 +89,14 @@ def _request(method: str, path: str, idempotency_key: str | None = None,
                 "skunkbox_client: %s %s failed (attempt %d/%d) tenant=%s: %s",
                 method, path, attempt + 1, attempts, tenant_id or "-", exc.__class__.__name__,
             )
-            continue
+            if attempt < attempts - 1:
+                continue
+            _log_management_call(
+                tenant_id, method, path, None,
+                int((time.monotonic() - started) * 1000), None,
+                exc.__class__.__name__,
+            )
+            break
 
         if resp.status_code >= 500 and retry and attempt < attempts - 1:
             log.warning("skunkbox_client: %s %s returned %d tenant=%s, retrying once",
@@ -99,6 +108,18 @@ def _request(method: str, path: str, idempotency_key: str | None = None,
         except ValueError:
             body = {}
 
+        response_headers = getattr(resp, "headers", {}) or {}
+        correlation_id = (
+            response_headers.get("X-Request-ID")
+            or response_headers.get("X-Correlation-ID")
+            or response_headers.get("Request-ID")
+        )
+        _log_management_call(
+            tenant_id, method, path, resp.status_code,
+            int((time.monotonic() - started) * 1000), correlation_id,
+            body.get("error") if resp.status_code >= 400 else None,
+        )
+
         if resp.status_code >= 400:
             raise SkunkBoxClientError(
                 body.get("message") or f"skunkBOX returned HTTP {resp.status_code}",
@@ -107,6 +128,52 @@ def _request(method: str, path: str, idempotency_key: str | None = None,
         return body
 
     raise SkunkBoxClientError(f"skunkBOX request failed: {last_exc}") from last_exc
+
+
+def _log_management_call(tenant_external_id: str | None, method: str, path: str,
+                         status_code: int | None, latency_ms: int,
+                         correlation_id: str | None, error_message: str | None) -> None:
+    """Persist non-sensitive Cophy-side observability for every management call.
+
+    Failures never mask the customer operation in production, but are
+    re-raised while testing so broken audit coverage cannot pass silently.
+    """
+    from .activity_logger import reraise_if_testing
+    try:
+        from .extensions import db
+        from .models import ApiRequestLog, Tenant
+        from .tenant_context import get_active_tenant
+
+        tenant = None
+        if tenant_external_id:
+            tenant = Tenant.query.filter_by(external_id=tenant_external_id).first()
+        if tenant is None:
+            tenant = get_active_tenant()
+        if tenant is None:
+            return
+
+        parts = [part for part in path.split("/") if part]
+        target = next((part for part in reversed(parts) if part.isdigit()), None)
+        operation = ".".join(parts[3:]) if len(parts) > 3 else ".".join(parts)
+        db.session.add(ApiRequestLog(
+            tenant_id=tenant.id,
+            integration_name="skunkBOX Management API",
+            endpoint=path,
+            method=method,
+            operation=operation[:120] or None,
+            target_identifier=target,
+            correlation_id=(correlation_id or "")[:255] or None,
+            status_code=status_code,
+            latency_ms=latency_ms,
+            error_message=(error_message or "")[:500] or None,
+        ))
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        reraise_if_testing()
 
 
 # ── Tenant lifecycle ─────────────────────────────────────────────────────
@@ -145,7 +212,7 @@ def reactivate_tenant(external_id: str) -> dict:
     return _request("POST", f"/api/v1/tenants/{external_id}/reactivate")
 
 
-# ── Knowledge / Agents management (read-only) ───────────────────────────
+# ── Knowledge / Agents management ───────────────────────────────────────
 #
 # Every call here requires the caller's active tenant UUID — skunkBOX
 # applies its `tenant_id == caller OR is_shared` visibility rule server-side
@@ -173,6 +240,48 @@ def list_agents(tenant_id: str) -> dict:
 
 def get_agent(tenant_id: str, agent_id: int) -> dict:
     return _request("GET", f"/api/v1/management/agents/{agent_id}", tenant_id=tenant_id, retry=True)
+
+
+def create_agent(tenant_id: str, name: str, *, role_title: str | None = None,
+                 description: str | None = None, system_prompt: str | None = None,
+                 model_id: int | None = None, idempotency_key: str | None = None) -> dict:
+    body = {"name": name, "role_title": role_title, "description": description,
+            "system_prompt": system_prompt, "model_id": model_id}
+    return _request(
+        "POST", "/api/v1/management/agents", tenant_id=tenant_id,
+        json_body=body, idempotency_key=idempotency_key, retry=bool(idempotency_key),
+    )
+
+
+def update_agent(tenant_id: str, agent_id: int, **fields) -> dict:
+    return _request(
+        "PATCH", f"/api/v1/management/agents/{agent_id}", tenant_id=tenant_id,
+        json_body={key: value for key, value in fields.items() if value is not None},
+    )
+
+
+def archive_agent(tenant_id: str, agent_id: int) -> dict:
+    return _request("POST", f"/api/v1/management/agents/{agent_id}/archive", tenant_id=tenant_id)
+
+
+def reactivate_agent(tenant_id: str, agent_id: int) -> dict:
+    return _request("POST", f"/api/v1/management/agents/{agent_id}/reactivate", tenant_id=tenant_id)
+
+
+def list_agent_eligible_collections(tenant_id: str, agent_id: int) -> dict:
+    return _request(
+        "GET", f"/api/v1/management/agents/{agent_id}/collections/eligible",
+        tenant_id=tenant_id, retry=True,
+    )
+
+
+def replace_agent_collections(tenant_id: str, agent_id: int, collection_ids: list[int],
+                              idempotency_key: str | None = None) -> dict:
+    return _request(
+        "PATCH", f"/api/v1/management/agents/{agent_id}/collections",
+        tenant_id=tenant_id, json_body={"collection_ids": collection_ids},
+        idempotency_key=idempotency_key, retry=bool(idempotency_key),
+    )
 
 
 # ── Components / AI Assets (Phase 7) ────────────────────────────────────

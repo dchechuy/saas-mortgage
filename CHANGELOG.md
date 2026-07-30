@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-07-30] - Tenant Completion Phase 5: Client Portal Agent and knowledge configuration
+- Made skunkBOX authoritative for customer Agent create/edit, approved prompts and fields, tenant-private plus Cofficiency Shared collection associations, and archive/reactivate lifecycle.
+- Retained the mixed local `AiAgent` pointer strategy required by conversations/chat Integrations; reconciliation covers owned and Shared Agents while refusing duplicate pointers or ownership-type repurposing.
+- Extended `ApiRequestLog` and added migration `n4o5p6q7r8s9` so all skunkBOX management calls record tenant, operation, target, status, latency, and returned correlation ID without secrets or sensitive bodies.
+- Added safe timeout/partial-success handling, read-only Shared configuration, active-tenant activity attribution, Phase 5 security tests, and architecture/user/operations/audit documentation.
+- Full suite: 137 tests pass.
+
 ## [2026-07-30] - Client Portal tenant completion Phase 3: repository-wide CSRF protection
 - Added centrally initialized Flask-WTF `CSRFProtect` coverage for every browser-originated mutation in `saas-mortgage` (Cophy Portal / Client Portal); this phase does not change skunkBOX.
 - Added explicit hidden tokens to all server-rendered mutation forms, including authentication, tenant switching/lifecycle, users/avatars/roles, feature flags and System Config, conversations, AI Quality, uploads, and release/document administration.

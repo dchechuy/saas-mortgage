@@ -231,6 +231,9 @@
 
 {% if can_view_agents %}
 <div id="config-tab-agents" style="display:none">
+  {% if agent_sync_warning %}
+  <div class="alert alert-warning">{{ agent_sync_warning }}</div>
+  {% endif %}
   <div class="sb-page-header">
     <div>
       <h1 class="page-title">AI Agents Config</h1>
@@ -286,6 +289,9 @@
               <strong>{{ agent.name }}</strong>
               {% if agent.is_shared %}
               <span class="badge text-bg-blue-lt" title="Managed by Cofficiency — read-only">Shared</span>
+              <span style="font-size:12px;color:var(--muted)">Owner: Cofficiency</span>
+              {% else %}
+              <span style="font-size:12px;color:var(--muted)">Owner: {{ active_tenant.name }}</span>
               {% endif %}
               {% if agent.description %}
               <div style="font-size:12px;color:var(--muted)">{{ agent.description }}</div>
@@ -308,8 +314,7 @@
               <div class="overflow-menu">
                 <button class="overflow-btn" onclick="toggleMenu(event,'agmenu-{{ agent.id }}')">⋮</button>
                 <div class="overflow-dropdown" id="agmenu-{{ agent.id }}">
-                  <button type="button" class="overflow-item"
-                          data-bs-toggle="modal" data-bs-target="#editAgentModal{{ agent.id }}">Edit</button>
+                  <a class="overflow-item" href="{{ url_for('models.edit_agent', agent_id=agent.id) }}">Edit Configuration</a>
                   <div style="border-top:1px solid var(--border);margin:4px 0"></div>
                   <form method="post" action="{{ url_for('models.toggle_agent', agent_id=agent.id) }}"
                         id="agtoggle-{{ agent.id }}" style="margin:0">
@@ -484,9 +489,8 @@
               <input type="text" name="name" required class="form-control" placeholder="e.g. Support Assistant">
             </div>
             <div class="col-md-6">
-              <label class="form-label">skunkBOX Agent ID <span class="text-danger">*</span></label>
-              <input type="number" name="skunkbox_agent_id" required class="form-control" placeholder="e.g. 42" min="1">
-              <div class="form-hint">Integer ID of the agent in skunkBOX.</div>
+              <label class="form-label">Role Title</label>
+              <input type="text" name="role_title" class="form-control" placeholder="e.g. Mortgage Policy Assistant">
             </div>
             <div class="col-md-12">
               <label class="form-label">Integration (skunkAPI) <span class="text-danger">*</span></label>
@@ -501,6 +505,29 @@
             <div class="col-12">
               <label class="form-label">Description</label>
               <input type="text" name="description" class="form-control" placeholder="What this agent does">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Instructions / System Prompt</label>
+              <textarea name="system_prompt" class="form-control" rows="5"></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Model ID</label>
+              <input type="number" name="model_id" class="form-control" min="1">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Knowledge Collections</label>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px">
+                {% for collection in agent_collections %}
+                <label class="form-check" style="border:1px solid var(--border);padding:10px;border-radius:8px">
+                  <input class="form-check-input" type="checkbox" name="collection_ids" value="{{ collection.id }}">
+                  <span class="form-check-label">
+                    {{ collection.name }}
+                    {% if collection.is_shared %}<span class="badge text-bg-blue-lt">Shared</span>{% endif %}
+                    <small style="display:block;color:var(--muted)">Owner: {{ 'Cofficiency' if collection.is_shared else active_tenant.name }}</small>
+                  </span>
+                </label>
+                {% endfor %}
+              </div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Avatar</label>

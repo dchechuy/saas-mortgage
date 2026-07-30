@@ -1,13 +1,9 @@
-"""Local-mirror upsert logic for skunkBOX Shared Agents (Cross-System Tenant
-AI Assets PRD, Phase 6). Called from app/routes/agents.py's conversation
-list on every view — same "always live, no scheduled job" philosophy
-Learning Center already uses for documents/collections (app/routes/agents.py
-learning_center()), rather than a separate reconciliation command.
+"""Reconcile tenant-local Agent pointers with authoritative skunkBOX Personas.
 
-Never touches a tenant-owned (`is_shared=False`) `AiAgent` row. Never
-deletes a Shared mirror row — an Agent that's no longer visible (unshared,
-archived, or the tenant lost access) is deactivated instead, so existing
-conversation history keeps a valid `AiAgent` to point at.
+The local row remains necessary for conversations, avatars, and the
+tenant's chat Integration, but skunkBOX owns Agent configuration and
+lifecycle. Both tenant-owned and Cofficiency Shared Agents are synchronized;
+rows are never deleted or silently converted between ownership types.
 """
 import logging
 
@@ -17,13 +13,8 @@ from ..models import AiAgent, Integration
 log = logging.getLogger(__name__)
 
 
-def sync_shared_agents_for_tenant(tenant) -> dict:
-    """Upsert local `AiAgent` mirror rows for every Cofficiency Shared Agent
-    visible to `tenant`. Returns a summary dict; never raises — a skunkBOX
-    outage must not break the conversations page, it should just mean
-    Shared Agents don't show up (or show stale) until the next successful
-    call.
-    """
+def sync_agents_for_tenant(tenant) -> dict:
+    """Upsert pointers for every owned or Shared Agent visible to `tenant`."""
     summary = {"created": 0, "updated": 0, "deactivated": 0, "conflicts": [], "fetch_error": None}
 
     if not tenant or not tenant.external_id or tenant.sync_status != "synced":
@@ -54,21 +45,21 @@ def sync_shared_agents_for_tenant(tenant) -> dict:
         return summary
 
     remote_agents = remote_page.get("agents", [])
-    shared_remote = [a for a in remote_agents if a.get("is_shared") and a.get("owner") != "self"]
-    seen_ids = {a["id"] for a in shared_remote}
+    visible_remote = [
+        a for a in remote_agents
+        if a.get("owner") == "self" or (a.get("is_shared") and a.get("owner") != "self")
+    ]
+    seen_ids = {a["id"] for a in visible_remote}
 
-    for remote in shared_remote:
+    for remote in visible_remote:
+        remote_is_shared = bool(remote.get("is_shared") and remote.get("owner") != "self")
         existing = AiAgent.query.filter_by(tenant_id=tenant.id, skunkbox_agent_id=remote["id"]).first()
         try:
-            if existing and not existing.is_shared:
-                # A customer already has their own local row pointing at
-                # this same skunkbox_agent_id — never silently repurpose it
-                # into a Shared mirror (ambiguous ownership).
+            if existing and existing.is_shared != remote_is_shared:
                 summary["conflicts"].append({
                     "skunkbox_agent_id": remote["id"],
-                    "message": f"Local agent #{existing.id} ({existing.name!r}) already uses "
-                              f"skunkbox_agent_id={remote['id']}; cannot mirror the Shared Agent "
-                              f"of the same id.",
+                    "message": f"Local Agent #{existing.id} has a different ownership type "
+                               "than the authoritative skunkBOX Agent; it was not repurposed.",
                 })
                 continue
             if existing:
@@ -85,7 +76,7 @@ def sync_shared_agents_for_tenant(tenant) -> dict:
                     integration_id=integration.id,
                     skunkbox_agent_id=remote["id"],
                     is_active=bool(remote.get("is_active", True)),
-                    is_shared=True,
+                    is_shared=remote_is_shared,
                 ))
                 db.session.commit()
                 summary["created"] += 1
@@ -108,6 +99,9 @@ def sync_shared_agents_for_tenant(tenant) -> dict:
     # are deliberately NOT symmetric.
     stale = AiAgent.query.filter(
         AiAgent.tenant_id == tenant.id,
+        # Legacy tenant-owned hand-configured pointers are retained by the
+        # mixed strategy until positively matched; absence from a remote
+        # page is not enough to destroy their local chat availability.
         AiAgent.is_shared.is_(True),
         AiAgent.is_active.is_(True),
         ~AiAgent.skunkbox_agent_id.in_(seen_ids),
@@ -119,3 +113,7 @@ def sync_shared_agents_for_tenant(tenant) -> dict:
         db.session.commit()
 
     return summary
+
+
+# Backwards-compatible name used by conversation routes and existing tests.
+sync_shared_agents_for_tenant = sync_agents_for_tenant

@@ -247,7 +247,7 @@ class UserActivityLog(db.Model):
 
 
 class ApiRequestLog(db.Model):
-    """One row per outbound call to an external Integration. Written by whatever code calls the API."""
+    """One row per outbound integration or skunkBOX management API call."""
     __tablename__ = "api_request_log"
 
     id               = db.Column(db.Integer, primary_key=True)
@@ -256,6 +256,9 @@ class ApiRequestLog(db.Model):
     integration_name = db.Column(db.String(120), nullable=True)  # snapshot at call time
     endpoint         = db.Column(db.String(255), nullable=True)
     method           = db.Column(db.String(10),  nullable=True)
+    operation        = db.Column(db.String(120), nullable=True)
+    target_identifier = db.Column(db.String(255), nullable=True)
+    correlation_id   = db.Column(db.String(255), nullable=True)
     status_code      = db.Column(db.Integer, nullable=True)
     latency_ms       = db.Column(db.Integer, nullable=True)
     error_message    = db.Column(db.Text, nullable=True)

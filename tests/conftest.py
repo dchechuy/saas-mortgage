@@ -287,9 +287,9 @@ class FakeSkunkBox:
         self._next_dataset_version_id = 1
         self._next_experiment_id = 1
 
-    def _record(self, name, *args, **kwargs):
-        self.calls.append((name, args, kwargs))
-        if self.fail_next and self.fail_next[0] == name:
+    def _record(self, call_name, *args, **kwargs):
+        self.calls.append((call_name, args, kwargs))
+        if self.fail_next and self.fail_next[0] == call_name:
             _, err = self.fail_next
             self.fail_next = None
             raise err
@@ -377,11 +377,14 @@ class FakeSkunkBox:
         return cid
 
     def seed_agent(self, name, owner_tenant_external_id, role_title=None, description=None,
-                   is_shared=False, is_active=True, agent_id=None):
+                   is_shared=False, is_active=True, agent_id=None, system_prompt=None,
+                   model_id=None, collection_ids=None):
         aid = agent_id if agent_id is not None else self._next_agent_id
         self._next_agent_id = max(self._next_agent_id, aid + 1)
         self.agents[aid] = {
             "id": aid, "name": name, "role_title": role_title, "description": description,
+            "system_prompt": system_prompt, "model_id": model_id,
+            "collection_ids": list(collection_ids or []),
             "is_shared": is_shared, "is_active": is_active,
             "_owner": owner_tenant_external_id,
         }
@@ -427,6 +430,60 @@ class FakeSkunkBox:
         if not record or not self._visible(record, tenant_id):
             raise SkunkBoxClientError("No agent exists with that id.",
                                       status_code=404, error_code="agent_not_found")
+        return self._envelope(record, tenant_id)
+
+    def create_agent(self, tenant_id, name, role_title=None, description=None,
+                     system_prompt=None, model_id=None, idempotency_key=None):
+        self._record("create_agent", tenant_id, name, role_title=role_title,
+                     description=description, system_prompt=system_prompt,
+                     model_id=model_id, idempotency_key=idempotency_key)
+        aid = self.seed_agent(
+            name, tenant_id, role_title=role_title, description=description,
+            system_prompt=system_prompt, model_id=model_id,
+        )
+        return self._envelope(self.agents[aid], tenant_id)
+
+    def update_agent(self, tenant_id, agent_id, **fields):
+        self._record("update_agent", tenant_id, agent_id, **fields)
+        from app.skunkbox_client import SkunkBoxClientError
+        record = self.agents.get(agent_id)
+        if not record or not self._visible(record, tenant_id):
+            raise SkunkBoxClientError("Agent not found.", status_code=404, error_code="agent_not_found")
+        if record["_owner"] != tenant_id or record["is_shared"]:
+            raise SkunkBoxClientError("Shared Agents are read-only.", status_code=403,
+                                      error_code="shared_agent_readonly")
+        record.update(fields)
+        return self._envelope(record, tenant_id)
+
+    def archive_agent(self, tenant_id, agent_id):
+        self._record("archive_agent", tenant_id, agent_id)
+        result = self.update_agent(tenant_id, agent_id, is_active=False)
+        return result
+
+    def reactivate_agent(self, tenant_id, agent_id):
+        self._record("reactivate_agent", tenant_id, agent_id)
+        result = self.update_agent(tenant_id, agent_id, is_active=True)
+        return result
+
+    def list_agent_eligible_collections(self, tenant_id, agent_id):
+        self._record("list_agent_eligible_collections", tenant_id, agent_id)
+        self.get_agent(tenant_id, agent_id)
+        return self.list_knowledge_collections(tenant_id)
+
+    def replace_agent_collections(self, tenant_id, agent_id, collection_ids, idempotency_key=None):
+        self._record("replace_agent_collections", tenant_id, agent_id, collection_ids,
+                     idempotency_key=idempotency_key)
+        from app.skunkbox_client import SkunkBoxClientError
+        record = self.agents.get(agent_id)
+        if not record or record["_owner"] != tenant_id or record["is_shared"]:
+            raise SkunkBoxClientError("Agent cannot be edited.", status_code=403,
+                                      error_code="shared_agent_readonly")
+        for collection_id in collection_ids:
+            collection = self.collections.get(collection_id)
+            if not collection or not self._visible(collection, tenant_id):
+                raise SkunkBoxClientError("Collection not found.", status_code=404,
+                                          error_code="collection_not_found")
+        record["collection_ids"] = list(dict.fromkeys(collection_ids))
         return self._envelope(record, tenant_id)
 
     # ── Components / Datasets / Experiments (Phase 7) ───────────────────
@@ -722,7 +779,9 @@ def fake_skunkbox(monkeypatch):
     for name in ("list_tenants", "get_tenant", "create_tenant",
                 "update_tenant", "archive_tenant", "reactivate_tenant",
                 "list_knowledge_collections", "get_knowledge_collection",
-                "list_agents", "get_agent",
+                "list_agents", "get_agent", "create_agent", "update_agent",
+                "archive_agent", "reactivate_agent",
+                "list_agent_eligible_collections", "replace_agent_collections",
                 "list_components", "get_component", "create_component", "update_component",
                 "list_component_versions", "promote_component_version",
                 "archive_component", "reactivate_component",

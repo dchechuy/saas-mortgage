@@ -8,6 +8,23 @@ repo's own `venv`/CLI in the same way this doc's Cophy commands assume
 
 ---
 
+## Client Portal Agent configuration
+
+For a failed or partial customer Agent save:
+
+1. Capture tenant, Agent ID, timestamp, and request/correlation ID.
+2. Query Cophy `api_request_log` rows with
+   `integration_name='skunkBOX Management API'`, then correlate the
+   `correlation_id` with skunkBOX logs.
+3. Reload before retrying. Agent PATCH may succeed before collection
+   replacement fails; replacement itself is idempotent.
+4. For pointer conflicts, inspect `(tenant_id, skunkbox_agent_id)` and
+   `is_shared`. Never flip ownership type or delete conversation history.
+5. During an outage, leave pointers intact and retry after recovery.
+
+The audit stores no service secret or request body. Never paste the secret
+into an incident ticket.
+
 ## 1. Observability — current state
 
 **What exists:**

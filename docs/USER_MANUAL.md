@@ -353,6 +353,11 @@ Tips:
 **Purpose:**  
 Create and manage AI Agent personas — the “characters” or configurations that define how an AI agent should behave in conversations.
 
+skunkBOX is authoritative for these Agents. The list shows the active
+tenant's Agents plus Cofficiency Shared Agents, including owner and
+editability. Tenant Agents can use multiple tenant-private and Cofficiency
+Shared knowledge collections.
+
 **Who can use it:**  
 Administrators or users with AI Agent configuration permission.
 
@@ -360,6 +365,15 @@ Administrators or users with AI Agent configuration permission.
 1. Open "System Config" → "AI Agents" (often available under Models or Agents).
 2. To create a new agent persona:
    - Click "Add Agent" or "Create Agent".
+   - Enter the role, description, instructions/system prompt, model ID, and
+     select eligible knowledge collections.
+3. Use **Edit Configuration** for approved fields and collection choices.
+   Deactivate/reactivate is soft lifecycle management; hard deletion is not
+   available.
+4. Shared Agents are read-only and managed by Cofficiency. Customers cannot
+   edit them or expose a Shared checkbox.
+5. After a partial-save warning, reload before retrying: the field update
+   may have succeeded before an invalid/stale collection was rejected.
    - Provide a name, description, and select or upload an avatar image (see avatar rules).
    - Configure persona settings, prompts, and default behaviors (where supported).
    - Save the persona.

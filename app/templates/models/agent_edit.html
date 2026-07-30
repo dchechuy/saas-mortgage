@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Agent Configuration{% endblock %}
+{% block content %}
+<div class="sb-page-header">
+  <div>
+    <h1 class="page-title">{{ remote_agent.name }}</h1>
+    <p style="color:var(--muted);margin:4px 0 0">
+      Owner: {{ 'Cofficiency' if remote_agent.is_shared else active_tenant.name }}
+      {% if remote_agent.is_shared %} · Shared · Read-only{% endif %}
+    </p>
+  </div>
+  <a class="btn btn-secondary" href="{{ url_for('models.list_models') }}#agents">Back to Agents</a>
+</div>
+
+{% if remote_agent.is_shared or not remote_agent.can_edit %}
+<div class="alert alert-info">This Shared Agent is managed by Cofficiency. Its configuration is available here for reference and cannot be changed.</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="{{ url_for('models.save_agent', agent_id=agent.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Name</label>
+          <input class="form-control" name="name" value="{{ remote_agent.name or '' }}" required
+                 {% if not remote_agent.can_edit %}disabled{% endif %}>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Role Title</label>
+          <input class="form-control" name="role_title" value="{{ remote_agent.role_title or '' }}"
+                 {% if not remote_agent.can_edit %}disabled{% endif %}>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" name="description" rows="2"
+                    {% if not remote_agent.can_edit %}disabled{% endif %}>{{ remote_agent.description or '' }}</textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Instructions / System Prompt</label>
+          <textarea class="form-control" name="system_prompt" rows="9"
+                    {% if not remote_agent.can_edit %}disabled{% endif %}>{{ remote_agent.system_prompt or '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Model ID</label>
+          <input class="form-control" type="number" min="1" name="model_id"
+                 value="{{ remote_agent.model_id or '' }}" {% if not remote_agent.can_edit %}disabled{% endif %}>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Knowledge Collections</label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px">
+            {% for collection in collections %}
+            <label class="form-check" style="border:1px solid var(--border);padding:12px;border-radius:8px">
+              <input class="form-check-input" type="checkbox" name="collection_ids"
+                     value="{{ collection.id }}"
+                     {% if collection.id in (remote_agent.collection_ids or []) %}checked{% endif %}
+                     {% if not remote_agent.can_edit %}disabled{% endif %}>
+              <span class="form-check-label">
+                {{ collection.name }}
+                {% if collection.is_shared %}<span class="badge text-bg-blue-lt">Shared</span>{% endif %}
+                <small style="display:block;color:var(--muted)">
+                  Owner: {{ 'Cofficiency' if collection.is_shared else active_tenant.name }}
+                </small>
+              </span>
+            </label>
+            {% else %}
+            <span style="color:var(--muted)">No eligible collections are available.</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% if remote_agent.can_edit %}
+      <div style="display:flex;justify-content:flex-end;margin-top:20px">
+        <button class="btn btn-primary" type="submit">Save Agent</button>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}

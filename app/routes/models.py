@@ -12,6 +12,7 @@ from ..models import (AgentConversation, AiAgent, Attribute, DocPrompt, FeatureF
                        LlmModel, NavItem, NavSection, TenantFeatureFlag)
 from ..page_registry import NAV_ITEMS
 from ..tenant_context import get_active_tenant, require_tenant_record
+from ..tenant_context import require_active_tenant_external_id
 
 _ALLOWED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
@@ -49,6 +50,21 @@ def list_models():
 
     active_tenant = get_active_tenant()
     active_tenant_id = active_tenant.id if active_tenant else None
+    agent_collections = []
+    agent_sync_warning = None
+    if can_view_agents and active_tenant and active_tenant.sync_status == "synced":
+        from ..services.agent_sync import sync_agents_for_tenant
+        from .. import skunkbox_client
+        from ..skunkbox_client import SkunkBoxClientError
+        sync_result = sync_agents_for_tenant(active_tenant)
+        if sync_result["fetch_error"]:
+            agent_sync_warning = "skunkBOX Agent configuration is temporarily unavailable."
+        try:
+            agent_collections = skunkbox_client.list_knowledge_collections(
+                active_tenant.external_id
+            ).get("collections", [])
+        except SkunkBoxClientError:
+            agent_sync_warning = "skunkBOX Agent configuration is temporarily unavailable."
 
     all_integrations = Integration.query.filter_by(tenant_id=active_tenant_id).order_by(
         Integration.category, Integration.provider, Integration.name
@@ -111,6 +127,8 @@ def list_models():
         attributes=Attribute.query.filter_by(tenant_id=active_tenant_id).order_by(Attribute.category, Attribute.name).all() if can_view_attributes else [],
         integrations=all_integrations if can_view_integrations else [],
         ai_agents=AiAgent.query.filter_by(tenant_id=active_tenant_id).order_by(AiAgent.name).all() if can_view_agents else [],
+        agent_collections=agent_collections,
+        agent_sync_warning=agent_sync_warning,
         all_integrations=all_integrations,
         feature_flags=feature_flags_view,
         active_tenant=active_tenant,
@@ -415,24 +433,13 @@ def add_agent():
         )
         return _redirect_to_system_config("agents")
 
+    from .. import skunkbox_client
+    from ..skunkbox_client import SkunkBoxClientError
+
     name = request.form.get("name", "").strip()
     integration_id = request.form.get("integration_id", "").strip()
-    skunkbox_agent_id_raw = request.form.get("skunkbox_agent_id", "").strip()
-    if not name or not integration_id or not skunkbox_agent_id_raw:
-        flash("Name, integration, and skunkBOX agent ID are required.", "error")
-        return _redirect_to_system_config("agents")
-    try:
-        skunkbox_agent_id = int(skunkbox_agent_id_raw)
-    except ValueError:
-        flash("skunkBOX agent ID must be an integer.", "error")
-        return _redirect_to_system_config("agents")
-
-    if AiAgent.query.filter_by(tenant_id=active_tenant.id, skunkbox_agent_id=skunkbox_agent_id).first():
-        flash(
-            f"An agent already exists for skunkBOX agent ID {skunkbox_agent_id} "
-            f"(possibly a Shared Agent mirror) — cannot create a second local agent for the same id.",
-            "error",
-        )
+    if not name or not integration_id:
+        flash("Name and integration are required.", "error")
         return _redirect_to_system_config("agents")
 
     integration = Integration.query.filter_by(
@@ -442,21 +449,79 @@ def add_agent():
         flash("Select an integration that belongs to the active tenant.", "error")
         return _redirect_to_system_config("agents")
 
+    model_id = request.form.get("model_id", "").strip()
+    try:
+        remote = skunkbox_client.create_agent(
+            require_active_tenant_external_id(), name,
+            role_title=request.form.get("role_title", "").strip() or None,
+            description=request.form.get("description", "").strip() or None,
+            system_prompt=request.form.get("system_prompt", "").strip() or None,
+            model_id=int(model_id) if model_id else None,
+            idempotency_key=request.form.get("idempotency_key") or str(uuid.uuid4()),
+        )
+        collection_ids = [int(value) for value in request.form.getlist("collection_ids")]
+        if collection_ids:
+            remote = skunkbox_client.replace_agent_collections(
+                active_tenant.external_id, remote["id"], collection_ids,
+                idempotency_key=str(uuid.uuid4()),
+            )
+    except (SkunkBoxClientError, ValueError) as exc:
+        flash(f"Agent could not be created: {exc}", "error")
+        return _redirect_to_system_config("agents")
+
+    if AiAgent.query.filter_by(
+        tenant_id=active_tenant.id, skunkbox_agent_id=remote["id"]
+    ).first():
+        flash("Agent was created in skunkBOX, but its local pointer conflicts with an existing row. Reconciliation is required.", "warning")
+        return _redirect_to_system_config("agents")
+
     avatar_filename = _save_agent_avatar(request.files.get("avatar"))
     agent = AiAgent(
         tenant_id=active_tenant.id,
-        name=name,
-        description=request.form.get("description", "").strip() or None,
+        name=remote["name"],
+        description=remote.get("description"),
         integration_id=integration.id,
-        skunkbox_agent_id=skunkbox_agent_id,
+        skunkbox_agent_id=remote["id"],
         avatar_filename=avatar_filename,
-        is_active=request.form.get("is_active", "1") == "1",
+        is_active=bool(remote.get("is_active", True)),
+        is_shared=False,
     )
     db.session.add(agent)
     db.session.commit()
     log_activity(current_user, "agent.created", page="System Config")
     flash(f"Agent '{name}' added.", "success")
     return _redirect_to_system_config("agents")
+
+
+@models_bp.route("/agents/<int:agent_id>/edit")
+@login_required
+@permission_required("agents", "view")
+def edit_agent(agent_id):
+    agent = db.get_or_404(AiAgent, agent_id)
+    require_tenant_record(agent)
+    active_tenant = get_active_tenant()
+    from .. import skunkbox_client
+    from ..skunkbox_client import SkunkBoxClientError
+    try:
+        remote = skunkbox_client.get_agent(active_tenant.external_id, agent.skunkbox_agent_id)
+        collections = skunkbox_client.list_agent_eligible_collections(
+            active_tenant.external_id, agent.skunkbox_agent_id
+        ).get("collections", [])
+    except SkunkBoxClientError as exc:
+        if exc.status_code == 404:
+            return ("", 404)
+        flash("skunkBOX Agent configuration is temporarily unavailable.", "error")
+        return _redirect_to_system_config("agents")
+    return render_template(
+        "models/agent_edit.html", agent=agent, remote_agent=remote,
+        collections=collections, active_tenant=active_tenant,
+        idempotency_key=str(uuid.uuid4()),
+        breadcrumbs=[
+            {"label": "Home", "url": url_for("agents.list_conversations")},
+            {"label": "System Config", "url": url_for("models.list_models") + "#agents"},
+            {"label": remote.get("name") or agent.name, "url": None},
+        ],
+    )
 
 
 @models_bp.route("/agents/<int:agent_id>/save", methods=["POST"])
@@ -469,47 +534,38 @@ def save_agent(agent_id):
         flash("This is a Shared Agent managed by Cofficiency and cannot be edited here.", "error")
         return _redirect_to_system_config("agents")
     name = request.form.get("name", "").strip()
-    integration_id = request.form.get("integration_id", "").strip()
-    skunkbox_agent_id_raw = request.form.get("skunkbox_agent_id", "").strip()
-    if not name or not integration_id or not skunkbox_agent_id_raw:
-        flash("Name, integration, and skunkBOX agent ID are required.", "error")
-        return _redirect_to_system_config("agents")
+    if not name:
+        flash("Name is required.", "error")
+        return redirect(url_for("models.edit_agent", agent_id=agent.id))
+    from .. import skunkbox_client
+    from ..skunkbox_client import SkunkBoxClientError
     try:
-        skunkbox_agent_id = int(skunkbox_agent_id_raw)
-    except ValueError:
-        flash("skunkBOX agent ID must be an integer.", "error")
-        return _redirect_to_system_config("agents")
-
-    if skunkbox_agent_id != agent.skunkbox_agent_id and AiAgent.query.filter_by(
-        tenant_id=agent.tenant_id, skunkbox_agent_id=skunkbox_agent_id
-    ).first():
-        flash(
-            f"An agent already exists for skunkBOX agent ID {skunkbox_agent_id} "
-            f"(possibly a Shared Agent mirror) — cannot point two local agents at the same id.",
-            "error",
+        model_id = request.form.get("model_id", "").strip()
+        remote = skunkbox_client.update_agent(
+            require_active_tenant_external_id(), agent.skunkbox_agent_id,
+            name=name,
+            role_title=request.form.get("role_title", "").strip(),
+            description=request.form.get("description", "").strip(),
+            system_prompt=request.form.get("system_prompt", "").strip(),
+            model_id=int(model_id) if model_id else None,
         )
-        return _redirect_to_system_config("agents")
+        skunkbox_client.replace_agent_collections(
+            require_active_tenant_external_id(), agent.skunkbox_agent_id,
+            [int(value) for value in request.form.getlist("collection_ids")],
+            idempotency_key=request.form.get("idempotency_key") or str(uuid.uuid4()),
+        )
+    except (SkunkBoxClientError, ValueError) as exc:
+        flash(f"Agent configuration was not fully saved: {exc}. Review the current skunkBOX state before retrying.", "error")
+        return redirect(url_for("models.edit_agent", agent_id=agent.id))
 
-    integration = Integration.query.filter_by(
-        id=int(integration_id), tenant_id=agent.tenant_id
-    ).first()
-    if not integration:
-        flash("Select an integration that belongs to the active tenant.", "error")
-        return _redirect_to_system_config("agents")
-
-    new_avatar = _save_agent_avatar(request.files.get("avatar"))
-    agent.name = name
-    agent.description = request.form.get("description", "").strip() or None
-    agent.integration_id = integration.id
-    agent.skunkbox_agent_id = skunkbox_agent_id
-    agent.is_active = request.form.get("is_active") == "1"
-    if new_avatar:
-        agent.avatar_filename = new_avatar
+    agent.name = remote["name"]
+    agent.description = remote.get("description")
+    agent.is_active = bool(remote.get("is_active", True))
 
     db.session.commit()
     log_activity(current_user, "agent.updated", page="System Config")
     flash(f"Agent '{agent.name}' saved.", "success")
-    return _redirect_to_system_config("agents")
+    return redirect(url_for("models.edit_agent", agent_id=agent.id))
 
 
 @models_bp.route("/agents/<int:agent_id>/toggle", methods=["POST"])
@@ -521,7 +577,21 @@ def toggle_agent(agent_id):
     if agent.is_shared:
         flash("This is a Shared Agent managed by Cofficiency and cannot be activated/deactivated here.", "error")
         return _redirect_to_system_config("agents")
-    agent.is_active = not agent.is_active
+    from .. import skunkbox_client
+    from ..skunkbox_client import SkunkBoxClientError
+    try:
+        if agent.is_active:
+            remote = skunkbox_client.archive_agent(
+                require_active_tenant_external_id(), agent.skunkbox_agent_id
+            )
+        else:
+            remote = skunkbox_client.reactivate_agent(
+                require_active_tenant_external_id(), agent.skunkbox_agent_id
+            )
+    except SkunkBoxClientError as exc:
+        flash(f"Agent lifecycle could not be changed: {exc}", "error")
+        return _redirect_to_system_config("agents")
+    agent.is_active = bool(remote.get("is_active", not agent.is_active))
 
     if not agent.is_active:
         # Archive all active conversations for this agent (tenant_id repeated
