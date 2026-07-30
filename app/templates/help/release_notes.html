@@ -44,6 +44,7 @@
             {% if current_user.role == 'admin' %}
             <form method="post" action="{{ url_for('help.unpublish_release', note_id=note.id) }}"
                   style="margin:0" onsubmit="return confirm('Move v{{ note.version_string }} back to draft?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm"
                       style="font-size:11px;padding:2px 10px;background:transparent;
                              border:1px solid var(--border);color:var(--muted)">
@@ -87,6 +88,7 @@
           {% if current_user.role == 'admin' %}
           <form method="post" action="{{ url_for('help.unpublish_release', note_id=note.id) }}"
                 style="margin:0" onsubmit="return confirm('Move v{{ note.version_string }} back to draft?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm"
                     style="font-size:11px;padding:2px 10px;background:transparent;
                            border:1px solid var(--border);color:var(--muted)">
@@ -129,6 +131,7 @@
           {% if current_user.role == 'admin' %}
           <form method="post" action="{{ url_for('help.unpublish_release', note_id=note.id) }}"
                 style="margin:0" onsubmit="return confirm('Move v{{ note.version_string }} back to draft?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm"
                     style="font-size:11px;padding:2px 8px;background:transparent;
                            border:1px solid var(--border);color:var(--muted)">
@@ -194,6 +197,7 @@
     {# Modal body #}
     <div style="padding:20px 24px">
       <form method="post" action="{{ url_for('help.generate_release') }}" id="generateForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div style="margin-bottom:16px">
           <label style="font-size:12px;font-weight:600;text-transform:uppercase;

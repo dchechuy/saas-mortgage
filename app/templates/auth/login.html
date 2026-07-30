@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Login - scenarioDesk</title>
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon-96x96.png') }}">
@@ -22,6 +23,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/csrf.js') }}" defer></script>
 </head>
 <body class="login-body">
   <button type="button" class="btn btn-icon btn-outline-secondary ds-theme-toggle ds-login-theme-toggle" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
@@ -51,6 +53,7 @@
           {% endwith %}
 
           <form method="post" class="stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div>
               <label class="form-label" for="username">Username</label>
               <input id="username" name="username" type="text" required autofocus class="form-control">

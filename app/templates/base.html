@@ -5,6 +5,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}saas-mortgage{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
@@ -25,6 +26,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/csrf.js') }}" defer></script>
 </head>
 <body>
 <div class="layout">
@@ -85,6 +87,7 @@
             {% for t in switchable_tenants %}
             <li>
               <form method="post" action="{{ url_for('tenants.switch_tenant') }}" style="margin:0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="tenant_id" value="{{ t.id }}">
                 <input type="hidden" name="next" value="{{ request.path }}">
                 <button type="submit" class="dropdown-item{{ ' active' if active_tenant and t.id == active_tenant.id else '' }}">
@@ -120,6 +123,7 @@
                 <form id="avatar-upload-form" method="post"
                       action="{{ url_for('users.upload_avatar_self') }}"
                       enctype="multipart/form-data" style="display:none">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input id="avatar-upload-input" type="file" name="avatar"
                          accept=".jpg,.jpeg,.png,.gif,.webp"
                          onchange="document.getElementById('avatar-upload-form').submit()"
@@ -164,6 +168,7 @@
               </a>
 
               <form method="post" action="{{ url_for('auth.logout') }}" style="margin:0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="user-menu-action" style="width:100%">
                   Log out
                 </button>

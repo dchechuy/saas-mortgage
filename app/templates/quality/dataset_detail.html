@@ -21,6 +21,7 @@
   </div>
   {% if has_access('datasets', 'edit') and dataset.is_active %}
   <form id="archive-ds-form" method="post" action="{{ url_for('quality.archive_dataset', dataset_id=dataset.id) }}" style="margin:0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="button" class="btn btn-secondary"
             onclick="confirmAction('Archive Dataset', 'Archived Datasets cannot be used in new Experiments.', 'archive-ds-form', 'Archive', 'btn-danger')">
       Archive
@@ -35,6 +36,7 @@
       <h3 style="margin-top:0">Details</h3>
       {% if has_access('datasets', 'edit') %}
       <form method="post" action="{{ url_for('quality.save_dataset', dataset_id=dataset.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
           <label class="form-label">Name</label>
           <input type="text" name="name" class="form-control" required maxlength="255" value="{{ dataset.name }}">
@@ -68,6 +70,7 @@
       </p>
       {% if has_access('datasets', 'edit') and dataset.is_active %}
       <form method="post" action="{{ url_for('quality.import_dataset', dataset_id=dataset.id) }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
           <input type="file" name="file" class="form-control" accept=".csv" required>
         </div>

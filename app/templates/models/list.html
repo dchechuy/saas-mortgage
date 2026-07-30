@@ -116,6 +116,7 @@
                 <div style="border-top:1px solid var(--border);margin:4px 0"></div>
                 <form method="post" action="{{ url_for('models.toggle_llm_model', model_id=model.id) }}"
                       id="mtoggle-{{ model.id }}" style="margin:0">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="button"
                           class="overflow-item {% if model.is_active %}overflow-item-danger{% endif %}"
                           onclick="confirmAction(
@@ -312,6 +313,7 @@
                   <div style="border-top:1px solid var(--border);margin:4px 0"></div>
                   <form method="post" action="{{ url_for('models.toggle_agent', agent_id=agent.id) }}"
                         id="agtoggle-{{ agent.id }}" style="margin:0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="button"
                             class="overflow-item {% if agent.is_active %}overflow-item-danger{% endif %}"
                             onclick="confirmAction(
@@ -470,6 +472,7 @@
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('models.add_agent') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Add AI Agent</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -526,6 +529,7 @@
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('models.save_agent', agent_id=agent.id) }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Edit {{ agent.name }}</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -591,6 +595,7 @@
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('models.add_llm_model') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Add Model</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -649,6 +654,7 @@
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('models.update_llm_model', model_id=model.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Edit {{ model.name }}</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -710,6 +716,7 @@
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('models.add_integration') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Add External API</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -770,6 +777,7 @@
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('models.save_integration', integration_id=integration.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Edit {{ integration.provider }}</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -895,6 +903,7 @@
                 </button>
                 {% if flag.is_overridden %}
                 <form method="post" action="{{ url_for('models.reset_flag', flag_id=flag.id) }}" style="margin:0">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-secondary btn-sm" title="Revert to the global default">Reset</button>
                 </form>
                 {% endif %}
@@ -922,6 +931,7 @@
       <p  id="flagModalDesc"  style="font-size:13px;color:var(--muted);margin:6px 0 0"></p>
     </div>
     <form id="flagModalForm" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div style="padding:20px 28px">
         <div style="display:flex;align-items:center;justify-content:space-between;
                     background:var(--bg);border:1px solid var(--border);border-radius:8px;
@@ -1287,6 +1297,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') secCloseEdit
         {% if can_edit_prompts %}
         <div id="prompt-edit-{{ key }}" style="display:none">
           <form method="POST" action="{{ url_for('models.save_doc_prompt', key=key) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <textarea name="prompt_text"
                       id="prompt-textarea-{{ key }}"
                       class="form-control"
@@ -1302,6 +1313,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') secCloseEdit
                     action="{{ url_for('models.reset_doc_prompt', key=key) }}"
                     style="margin:0"
                     onsubmit="return confirm('Reset to default? This will overwrite your current text.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-secondary btn-sm"
                         style="color:var(--danger-text,#dc2626)">Reset to Default</button>
               </form>

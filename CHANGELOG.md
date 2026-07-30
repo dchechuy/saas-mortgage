@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-07-30] - Client Portal tenant completion Phase 3: repository-wide CSRF protection
+- Added centrally initialized Flask-WTF `CSRFProtect` coverage for every browser-originated mutation in `saas-mortgage` (Cophy Portal / Client Portal); this phase does not change skunkBOX.
+- Added explicit hidden tokens to all server-rendered mutation forms, including authentication, tenant switching/lifecycle, users/avatars/roles, feature flags and System Config, conversations, AI Quality, uploads, and release/document administration.
+- Added a shared same-origin browser helper that supplies tokens to dynamically-created forms and sends `X-CSRFToken` for AJAX/JSON `POST`/`PUT`/`PATCH`/`DELETE` requests without exposing tenant IDs or credentials.
+- Missing, invalid, or expired tokens now fail before route code runs, with a generic 400 JSON response for AJAX and a safe same-origin redirect plus retry message for form posts; login failures return to the login GET without looping.
+- No CSRF exemptions were added because the Client Portal has no inbound machine-to-machine mutation endpoints; outbound skunkBOX calls retain their separate credential schemes.
+- Added `tests/test_csrf_protection.py` covering forged tenant switches, user creation, tenant archival, feature flags, AJAX conversation/quality mutations, tenant checks after switching, reusable tokens, and upload-form coverage.
+- Updated `docs/ARCHITECTURE.md` and resolved the former CSRF known gap in `docs/TENANT_ISOLATION_AUDIT.md`.
+- Full suite: 130 tests pass.
+
 ## [2026-07-26] - Cross-System Tenant AI Assets Phase 8: cross-system audit and rollout
 - Coordinated final phase across saas-platform and saas-mortgage, led from this repo. Goal: prove tenant isolation and synchronization end to end before enabling customer AI Asset management for a pilot tenant.
 - **Migration rehearsal** (`docs/MIGRATION_REHEARSAL.md`, new): disposable-copy upgrade + ownership audit on both systems. skunkBOX: applied one pending merge-heads migration, confirmed 100% of legacy data Cofficiency-owned, AdvantageFirst has zero legacy records, zero document/collection cardinality violations, round-tripped cleanly, applied to the real dev DB (backed up). Cophy: confirmed already at head, UUID reconciliation cross-checked byte-for-byte against skunkBOX's known values, `sync_status=synced` for both seeded tenants.

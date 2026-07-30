@@ -20,6 +20,7 @@
     <p class="text-secondary">No Dataset has data imported yet — import a CSV into a Dataset before running an Experiment.</p>
     {% else %}
     <form method="post" action="{{ url_for('quality.new_experiment') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="component_id" id="component_id_hidden">
       <input type="hidden" name="dataset_id" id="dataset_id_hidden">
 

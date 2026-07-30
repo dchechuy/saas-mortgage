@@ -128,7 +128,7 @@ its implementation and test evidence. All 69 tests pass as of this writing
 | 2 | External user cannot list/read/edit/toggle/archive/reference another tenant's records | ✅ | `require_tenant_record()` + inline tenant checks on every direct-ID route (see audit above). `tests/test_tenant_phase3.py::test_cross_tenant_edit_toggle_avatar_rejected`, `tests/test_tenant_phase5.py::test_cross_tenant_direct_operations_rejected`, `tests/test_tenant_adversarial.py::test_cross_tenant_ids_fail_for_every_route` |
 | 3 | Cofficiency user cannot access a selected tenant's page without existing required role permission | ✅ | Tenant resolution is additive to `permission_required`/`feature_required`, never a bypass — switching changes *what* data a permitted page shows, not *whether* the page is reachable. `tests/test_tenant_phase2.py::test_permissions_still_apply_after_switching`, `tests/test_tenant_adversarial.py::test_limited_cofficiency_user_retains_limitations_after_switching` |
 | 4 | Forged agent/integration/model/user/conversation ID from another tenant is rejected | ✅ | Covered per-model in the audit above. `tests/test_tenant_phase4.py::test_agent_cannot_reference_another_tenants_integration`, `test_cross_tenant_update_toggle_batch_rejected`; `tests/test_tenant_phase5.py::test_forged_cross_tenant_agent_id_rejected`; `tests/test_tenant_adversarial.py::test_cross_tenant_agent_integration_reference_fails` |
-| 5 | Tenant switching accepts only active tenants; CSRF-protected per project conventions | ⚠️ Partial | `switch_tenant()` validates `Tenant.query.filter_by(id=target_id, is_active=True)` — an inactive or nonexistent target is rejected (`tests/test_tenant_phase2.py::test_cofficiency_user_default_resolution`, `test_tenant_adversarial.py::test_inactive_tenants_cannot_be_selected_or_receive_data`). **CSRF**: this repository has no CSRF middleware anywhere (no Flask-WTF, no token on any form) — "according to project conventions" is satisfied literally (the switch form matches every other POST form in the app), but the *project itself* has no CSRF protection to inherit. Flagging as a pre-existing, repository-wide gap rather than silently claiming coverage that doesn't exist. |
+| 5 | Tenant switching accepts only active tenants; CSRF-protected per project conventions | ✅ | `switch_tenant()` validates `Tenant.query.filter_by(id=target_id, is_active=True)` — an inactive or nonexistent target is rejected (`tests/test_tenant_phase2.py::test_cofficiency_user_default_resolution`, `test_tenant_adversarial.py::test_inactive_tenants_cannot_be_selected_or_receive_data`). Repository-wide Flask-WTF protection now rejects missing/invalid switch tokens before route code runs; `tests/test_csrf_protection.py::test_tenant_switch_rejects_missing_and_invalid_token_and_reuses_valid_token` also proves a valid session token remains usable across ordinary workspace switches. |
 | 6 | User tenant assignment cannot be mutated through UI or crafted requests | ✅ | No route reads or writes `User.tenant_id` after creation; `add_user`/`edit_user` never accept a `tenant_id` form field even when one is forged into the POST body. `tests/test_tenant_phase3.py::test_add_user_gets_active_tenant_and_ignores_forged_tenant_id`, `test_existing_user_tenant_cannot_be_changed_via_edit`; `tests/test_tenant_adversarial.py::test_tenant_assignment_immutable_via_crafted_forms` |
 | 7 | Bulk operations cannot affect another tenant | ✅ | Every bulk `.update()`/`.delete()` site carries a tenant predicate (see audit above). `tests/test_tenant_phase4.py::test_cross_tenant_update_toggle_batch_rejected`; `tests/test_tenant_adversarial.py::test_bulk_operations_cannot_affect_another_tenant` |
 | 8 | Reporting never mixes tenant-owned rows | ✅ | All three Reporting tabs' base queries, aggregates, and filter dropdowns share one tenant-and-date-filtered query object per tab (Phase 6). `tests/test_tenant_adversarial.py::test_reports_and_aggregates_contain_only_event_tenant` |
@@ -153,19 +153,21 @@ its implementation and test evidence. All 69 tests pass as of this writing
 | 12 | New Cofficiency-user actions appear in the selected tenant's report | ✅ | `log_activity()` resolves the actor's active tenant, not home tenant. `tests/test_tenant_phase3.py::test_activity_uses_active_tenant_while_actor_stays_cofficiency`; `tests/test_tenant_adversarial.py::test_cofficiency_actor_activity_appears_in_selected_tenant` |
 | 13 | User Documentation and Release Notes unchanged across tenant switches | ✅ | See §16.10 above. |
 
-## Known gap to carry forward
+## Resolved cross-cutting gap: CSRF
 
-**CSRF protection is repository-wide absent**, not specific to tenant
-separation — no form anywhere in this codebase (including pre-existing ones
-like login, user edit, or role save) carries a CSRF token, and no Flask-WTF
-or equivalent middleware is installed. The tenant-switch endpoint matches
-this existing (missing) convention exactly rather than introducing a
-one-off inconsistency. Adding CSRF protection is a cross-cutting change
-affecting every POST form in the app and is out of scope for tenant
-separation; flagging it here so it isn't mistaken for a tenant-specific gap.
-Still true as of the Cross-System audit below — no form added by Phases
-5–7 (`quality.py`, `tenants.py`, `users.py`, `models.py`) carries a CSRF
-token either, matching this same pre-existing convention.
+The repository-wide CSRF gap identified by the original tenant-separation
+audit is closed. Flask-WTF protection is initialized centrally, every
+server-rendered mutation form carries a token, and same-origin AJAX/JSON
+mutations send the token in `X-CSRFToken`. This includes login/logout and
+password changes, tenant lifecycle and switching, user/avatar management,
+roles, feature flags and configuration, conversations, AI Quality proxy
+operations, uploads, and documentation/release administration.
+
+There are no Client Portal CSRF exemptions: no inbound mutation endpoint
+uses a machine-to-machine authentication scheme. Safe failure handling and
+the tenant-specific regression evidence are in
+`tests/test_csrf_protection.py`. CSRF remains only one layer; the tests also
+confirm that a valid token does not bypass active-tenant ownership checks.
 
 ---
 

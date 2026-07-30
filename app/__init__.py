@@ -1,11 +1,13 @@
 import os
+from urllib.parse import urlparse
 
 import markdown as md_lib
-from flask import Flask
+from flask import Flask, flash, jsonify, redirect, request, url_for
 from flask_login import current_user
+from flask_wtf.csrf import CSRFError
 
 from .access import user_has_access
-from .extensions import db, login_manager, migrate
+from .extensions import csrf, db, login_manager, migrate
 from .page_registry import NAV_ITEMS, PAGES
 
 
@@ -20,6 +22,37 @@ def create_app() -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    csrf.init_app(app)
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(error):
+        """Return a safe response for stale, missing, or invalid CSRF tokens.
+
+        Browser fetch calls receive JSON; ordinary form posts are redirected
+        to a safe same-origin page so login and expired sessions never enter a
+        POST redirect loop.
+        """
+        message = "Your form expired or could not be verified. Please try again."
+        is_ajax = (
+            request.is_json
+            or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or request.accept_mimetypes.best == "application/json"
+        )
+        if is_ajax:
+            return jsonify({"ok": False, "error": "csrf_failed", "message": message}), 400
+
+        flash(message, "error")
+        referrer = request.referrer
+        if referrer:
+            parsed = urlparse(referrer)
+            if not parsed.netloc or parsed.netloc == request.host:
+                safe_path = parsed.path or "/"
+                if parsed.query:
+                    safe_path = f"{safe_path}?{parsed.query}"
+                return redirect(safe_path)
+        if current_user.is_authenticated:
+            return redirect(url_for("agents.list_conversations"))
+        return redirect(url_for("auth.login"))
 
     from .models import (AiAgent, AgentConversation, AgentMessage,  # noqa: F401
                           Attribute, DocPrompt, Experiment, FeatureFlag, Integration, LlmModel,

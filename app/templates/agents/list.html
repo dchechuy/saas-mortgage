@@ -49,6 +49,7 @@
       {% for agent in ai_agents %}
       <form method="post" action="{{ url_for('agents.new_conversation') }}"
             style="margin:0;flex-shrink:0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="agent_id" value="{{ agent.id }}">
         <button type="submit" class="agent-tile">
           {% if agent.avatar_filename %}
@@ -308,6 +309,7 @@
                 <div style="border-top:1px solid var(--border);margin:4px 0"></div>
                 <form method="post" action="{{ url_for('agents.archive_conversation', conversation_id=conv.id) }}"
                       id="carchive-{{ conv.id }}" style="margin:0">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="button" class="overflow-item overflow-item-danger"
                           onclick="confirmAction(
                             'Archive conversation',
@@ -653,6 +655,7 @@ async function toggleFavorite(btn) {
 
 {# Hidden form — submitted by JS #}
 <form id="new-conv-form" method="post" action="{{ url_for('agents.new_conversation') }}" style="display:none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" id="new-conv-agent-id" name="agent_id">
   <input type="hidden" id="new-conv-initial-msg" name="initial_message">
 </form>

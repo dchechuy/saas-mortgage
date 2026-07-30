@@ -11,6 +11,7 @@
 
 <div class="card">
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-6">
@@ -63,6 +64,7 @@
   </div>
   <div class="card-body">
     <form method="post" action="{{ url_for('users.upload_avatar', user_id=user.id) }}" enctype="multipart/form-data" class="row g-3 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="col-md-8 col-lg-6">
         <label class="form-label">Upload image</label>
         <input type="file" name="avatar" accept=".jpg,.jpeg,.png,.gif,.webp" class="form-control">

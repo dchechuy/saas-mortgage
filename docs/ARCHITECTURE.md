@@ -12,6 +12,30 @@
 - Auth: Flask-Login
 - Migrations: Flask-Migrate
 
+## CSRF protection
+
+All browser-originated state changes are protected centrally by
+Flask-WTF's `CSRFProtect`, initialized in `app/__init__.py` from the shared
+instance in `app/extensions.py`. Server-rendered mutation forms include a
+`csrf_token` hidden field. `app/templates/base.html` and the standalone
+login page also expose the session-bound token in a `csrf-token` meta tag;
+`app/static/js/csrf.js` adds the `X-CSRFToken` header to same-origin
+`POST`, `PUT`, `PATCH`, and `DELETE` `fetch()` requests and supplies a
+hidden field for dynamically-created forms.
+
+Missing, invalid, and expired tokens fail before route code can mutate
+state. Traditional form failures redirect only to a safe same-origin GET
+page and show a generic retry message; AJAX/JSON failures return a generic
+400 JSON response. No tenant identifier, credential, or application secret
+is embedded in the CSRF token. The Client Portal currently has no inbound
+machine-to-machine mutation endpoint, so there are no CSRF exemptions.
+Outbound calls to skunkBOX use their own service/API credentials and are
+not browser endpoints.
+
+CSRF verification is additive to authentication, role permissions, feature
+flags, and tenant ownership checks. Passing a valid CSRF token never grants
+access to a different tenant's record.
+
 ## Design intent
 
 - Keep the starter small enough to understand quickly.
@@ -221,4 +245,3 @@ integer — the same established pattern as `AiAgent.skunkbox_agent_id`.
   (retiring the dual-auth-path situation above) is unscheduled future work.
 - Phase 8 (cross-system audit and staged rollout) per the PRD's phased
   delivery plan.
-

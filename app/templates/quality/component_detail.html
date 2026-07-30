@@ -23,6 +23,7 @@
     {% if has_access('components', 'edit') %}
     {% if component.is_active %}
     <form id="archive-comp-form" method="post" action="{{ url_for('quality.archive_component', component_id=component.id) }}" style="margin:0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="button" class="btn btn-secondary"
               onclick="confirmAction('Archive Component', 'Archived Components stay available for history but cannot be used in new Experiments. You can reactivate it later.', 'archive-comp-form', 'Archive', 'btn-danger')">
         Archive
@@ -30,6 +31,7 @@
     </form>
     {% else %}
     <form method="post" action="{{ url_for('quality.reactivate_component', component_id=component.id) }}" style="margin:0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-secondary">Reactivate</button>
     </form>
     {% endif %}
@@ -46,6 +48,7 @@
       <h3 style="margin-top:0">Fields &amp; Configuration</h3>
       {% if has_access('components', 'edit') %}
       <form method="post" action="{{ url_for('quality.save_component', component_id=component.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
           <label class="form-label">Title</label>
           <input type="text" name="title" class="form-control" required maxlength="255" value="{{ component.title }}">
@@ -125,12 +128,14 @@
       <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
         {% if draft %}
         <form method="post" action="{{ url_for('quality.promote_component', component_id=component.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="target_status" value="release">
           <button type="submit" class="btn btn-secondary w-100" {{ 'disabled' if release else '' }}>Promote Draft → Release</button>
         </form>
         {% endif %}
         {% if release %}
         <form method="post" action="{{ url_for('quality.promote_component', component_id=component.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="target_status" value="production">
           <button type="submit" class="btn btn-primary w-100">Promote Release → Production</button>
         </form>

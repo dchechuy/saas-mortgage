@@ -67,6 +67,7 @@
                   <a href="{{ url_for('users.edit_user', user_id=user.id) }}" class="btn btn-secondary btn-sm">Edit</a>
                   {% if user.id != current_user.id %}
                   <form method="post" action="{{ url_for('users.toggle_user', user_id=user.id) }}" style="margin:0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-secondary btn-sm">{{ 'Deactivate' if user.is_active else 'Activate' }}</button>
                   </form>
                   {% endif %}
@@ -184,6 +185,7 @@
           <div class="overflow-dropdown">
             {% if user_counts.get(role.name, 0) == 0 %}
             <form method="post" action="{{ url_for('permissions.delete_role', role_id=role.id) }}" style="margin:0">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="overflow-item overflow-item-danger">Delete Role</button>
             </form>
             {% else %}
@@ -204,6 +206,7 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('permissions.add_role') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Add Role</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -226,6 +229,7 @@
   <div class="modal-dialog modal-dialog-centered" style="max-width:960px">
     <div class="modal-content">
       <form method="post" action="{{ url_for('permissions.save_role', role_id=role.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Edit {{ role.name | capitalize }}</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
