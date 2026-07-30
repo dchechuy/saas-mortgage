@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-07-30] - Tenant Completion Phase 6 rollout evidence and curation tooling
+- Added read-only Cophy `tenant-rollout-preflight` evidence generation for revisions, migration head, tenant UUID/sync state, Integrations, feature overrides, credentials, and management-audit baselines
+- Added target pilot, monitoring, rollback-drill, and signed go/no-go record plus updated rollout/runbook instructions
+- Coordinated a skunkBOX `export-shared-review` command covering collection sources/licensing review and Agent prompt/collection/skill/MCP/model dependencies without changing Shared state
+- Generated local-dev evidence and a 14-collection/15-Agent review inventory; status is explicitly no-go pending clean deploy revisions, target credentials/backups/rehearsal, stakeholder approvals, named pilot, and observation period
+- Full suites: Cophy 138 passed; skunkBOX 209 passed; both local databases are at migration head
+
 ## [2026-07-30] - Tenant Completion Phase 5: Client Portal Agent and knowledge configuration
 - Made skunkBOX authoritative for customer Agent create/edit, approved prompts and fields, tenant-private plus Cofficiency Shared collection associations, and archive/reactivate lifecycle.
 - Retained the mixed local `AiAgent` pointer strategy required by conversations/chat Integrations; reconciliation covers owned and Shared Agents while refusing duplicate pointers or ownership-type repurposing.

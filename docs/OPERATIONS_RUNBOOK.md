@@ -25,6 +25,29 @@ For a failed or partial customer Agent save:
 The audit stores no service secret or request body. Never paste the secret
 into an incident ticket.
 
+## Phase 6 evidence commands
+
+Run the skunkBOX inventory first, review it with stakeholders, then link it
+from Cophy's preflight:
+
+```bash
+# skunkBOX (read-only)
+venv/bin/flask export-shared-review \
+  --output "docs/rollout/Shared Resource Review - TARGET.md"
+
+# Cophy (read-only)
+.venv/bin/flask tenant-rollout-preflight \
+  --environment TARGET \
+  --platform-inventory "/absolute/path/to/Shared Resource Review - TARGET.md" \
+  --output "docs/rollout/Tenant Completion Phase 6 - TARGET Evidence.md"
+```
+
+Neither command backs up, migrates, reconciles, shares, enables, archives,
+or revokes anything. Operators execute those separately and paste command,
+timestamp, counts, backup checksum/location, and outcome into the evidence
+and pilot records. This separation prevents an inventory command from
+becoming an unreviewed deployment switch.
+
 ## 1. Observability — current state
 
 **What exists:**
