@@ -266,3 +266,8 @@ integer — the same established pattern as `AiAgent.skunkbox_agent_id`.
   (retiring the dual-auth-path situation above) is unscheduled future work.
 - Phase 8 (cross-system audit and staged rollout) per the PRD's phased
   delivery plan.
+- Calls remains intentionally unimplemented. No Calls-specific PRD,
+  authoritative source, ingestion contract, credential/account mapping, or
+  artifact lifecycle has been approved, so creating schema/routes now would
+  violate the Phase 7 readiness gate. See `docs/CALLS_TENANCY_READINESS.md`
+  for the required decisions and immutable tenant contract.

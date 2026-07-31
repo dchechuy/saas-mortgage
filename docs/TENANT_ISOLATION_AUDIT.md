@@ -100,7 +100,12 @@ For each tenant-owned model:
 
 ## Explicitly deferred (out of scope per the PRD)
 
-- **Calls**: feature does not exist yet; PRD requires it be tenant-owned when built.
+- **Calls**: feature does not exist yet. The Phase 7 repository review found
+  no Calls-specific PRD or source/API contract, so no speculative model,
+  migration, route, flag, or placeholder was added. The blocking decisions,
+  immutable ownership rules, trusted-ingestion requirements, and complete
+  future acceptance matrix are recorded in
+  `docs/CALLS_TENANCY_READINESS.md`.
 
 The two items formerly listed here — "Components / AI Assets" and "the
 skunkBOX tenant-ID contract" — are no longer deferred. Both were built by

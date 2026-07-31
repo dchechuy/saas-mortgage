@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-07-30] - Controlled production tenant correction command
+- Added `flask correct-tenant-deployment` with mutually exclusive `--dry-run`/`--apply` modes and explicit authoritative Cofficiency/AdvantageFirst UUID arguments
+- Applies the approved email-domain classification, gives corrected Cofficiency users AdvantageFirst as their remembered workspace, and marks corrected tenant mirrors unsynced for mandatory reconciliation
+- Refuses missing/duplicate seed tenants, invalid/colliding UUIDs, and snapshots exact historical activity/LLM/API log ownership before and after apply without printing secrets
+- Rehearsed dry-run and apply against a SQLite-consistent copy of the deployed database: exactly five users corrected, projected counts Cofficiency 6 / AdvantageFirst 2, and all 138 activity / 24 LLM / 71 API log rows preserved
+- Full Cophy suite: 140 tests pass
+
+## [2026-07-30] - Tenant Completion Phase 7 Calls readiness gate
+- Confirmed neither Cophy nor skunkBOX has an approved Calls-specific PRD, authoritative source, ingestion/API contract, trusted account mapping, or artifact lifecycle
+- Added `docs/CALLS_TENANCY_READINESS.md` with the required product/source/data/operations decisions, immutable tenant contract, and three-tenant security acceptance fixture
+- Intentionally created no speculative Calls tables, migrations, routes, feature flags, navigation, workers, webhooks, or skunkBOX endpoints, as required by the Phase 7 prompt
+- Updated architecture and tenant audit so Calls cannot be mistaken for implemented or silently deferred work
+
 ## [2026-07-30] - Tenant Completion Phase 6 rollout evidence and curation tooling
 - Added read-only Cophy `tenant-rollout-preflight` evidence generation for revisions, migration head, tenant UUID/sync state, Integrations, feature overrides, credentials, and management-audit baselines
 - Added target pilot, monitoring, rollback-drill, and signed go/no-go record plus updated rollout/runbook instructions
